@@ -1,7 +1,7 @@
-import { PrismaClient } from "@/generated/prisma";
 import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import ServicesClient from "./_components/ServicesClient";
+import prismaInstance from "@/lib/db";
 
 export default async function ServicesPage() {
 	const session = await getSession();    
@@ -10,8 +10,7 @@ export default async function ServicesPage() {
 		return redirect("/sign-in")
 	}
 
-	const prisma = new PrismaClient();
-	const services = await prisma.service.findMany();
+	const services = await prismaInstance.service.findMany();
 
 	return <ServicesClient services={services} userId={session.user.id} />;
 }

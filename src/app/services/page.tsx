@@ -4,11 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Clock, Star, ArrowRight } from "lucide-react"
 import { formatPrice } from "@/lib/utils"
-import { PrismaClient } from "@/generated/prisma"
+import prismaInstance from "@/lib/db"
 
 export default async function ServicesPage() {
-    const prisma = new PrismaClient();
-    const services = await prisma.service.findMany();
+    const services = await prismaInstance.service.findMany();
 
      if (services.length === 0) {
     return (

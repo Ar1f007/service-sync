@@ -235,7 +235,7 @@ export default function EmployeesClient({
 							<DialogTrigger asChild>
 								<Button variant="outline" className="border-teal-200 text-teal-700 hover:bg-teal-50 bg-transparent">
 									<Settings className="w-4 h-4" />
-									<span className="hidden md:inline-block">
+									<span className="hidden md:inline-block ml-2">
 										Assign Services
 									</span>
 								</Button>
@@ -293,7 +293,7 @@ export default function EmployeesClient({
 
 						<Button onClick={() => setIsAddDialogOpen(true)} className="bg-teal-700 hover:bg-teal-800 text-white">
 							<PlusCircle className="w-4 h-4" />
-							<span className="hidden md:inline-block">
+							<span className="hidden md:inline-block ml-2">
 								Add New Employee
 							</span>
 						</Button>

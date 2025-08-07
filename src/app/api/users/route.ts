@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
 import { auth } from "@/lib/auth";
+import prismaInstance from "@/lib/db";
 
-const prisma = new PrismaClient();
 
 export async function GET(request: Request) {
 	const session = await auth.api.getSession({ headers: request.headers });
@@ -13,7 +12,7 @@ export async function GET(request: Request) {
 	const { searchParams } = new URL(request.url);
 	const excludeEmployees = searchParams.get("excludeEmployees") === "true";
 
-	const users = await prisma.user.findMany({
+	const users = await prismaInstance.user.findMany({
 		where: excludeEmployees ? { employeeInfo: { none: {} } } : {},
 		select: { id: true, name: true, email: true },
 	});

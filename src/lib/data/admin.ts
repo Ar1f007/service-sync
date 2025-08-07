@@ -1,6 +1,4 @@
-import AppointmentsClient from "./_components/AppointmentsClient";
-import { getSession } from "@/lib/session";
-import prismaInstance from "@/lib/db";
+import prismaInstance from "../db";
 
 interface Service {
   id: string;
@@ -15,7 +13,6 @@ interface User {
   email: string;
 }
 
-
 interface Appointment {
   id: string;
   service: { id: string; title: string; price: number; duration: number };
@@ -25,16 +22,27 @@ interface Appointment {
   status: string;
 }
 
-async function fetchAppointments(userId: string, role: string): Promise<Appointment[]> {
+export async function getAppointments(userId: string, role: string): Promise<Appointment[]> {
   try {
     const where: any = {};
-    if (role !== "staff") {
+
+    // For admins, fetch all appointments
+    if (role === "admin") {
+      // No filtering by userId or employeeId
+    } else if (role === "staff") {
+      // For staff, fetch only their appointments
       const employee = await prismaInstance.employee.findFirst({
-        where: {userId },
+        where: { userId },
         select: { id: true },
       });
-      if (employee) where.employeeId = employee.id;
-      else return [];
+      if (employee) {
+        where.employeeId = employee.id;
+      } else {
+        return [];
+      }
+    } else {
+      // For other roles (e.g., client), no appointments
+      return [];
     }
 
     const appointments = await prismaInstance.appointment.findMany({
@@ -50,19 +58,23 @@ async function fetchAppointments(userId: string, role: string): Promise<Appointm
       id: appt.id,
       service: appt.service,
       client: appt.client,
-      employee: appt.employee,
+      employee: {
+        ...appt.employee,
+        user: {
+          ...appt.employee.user,
+          name: appt.employee.user.name || "Unnamed",
+        },
+      },
       dateTime: appt.dateTime.toISOString(),
       status: appt.status,
     }));
   } catch (error) {
     console.error("Failed to fetch appointments:", error);
     return [];
-  } finally {
-    // await prismaInstance.$disconnect();
   }
 }
 
-async function fetchServices(): Promise<Service[]> {
+export async function getServices(): Promise<Service[]> {
   try {
     return await prismaInstance.service.findMany({
       select: { id: true, title: true, price: true, duration: true },
@@ -70,12 +82,10 @@ async function fetchServices(): Promise<Service[]> {
   } catch (error) {
     console.error("Failed to fetch services:", error);
     return [];
-  } finally {
-    // await prismaInstance.$disconnect();
   }
 }
 
-async function fetchClients(): Promise<User[]> {
+export async function getClients(): Promise<User[]> {
   try {
     return await prismaInstance.user.findMany({
       where: { role: "client" },
@@ -84,44 +94,5 @@ async function fetchClients(): Promise<User[]> {
   } catch (error) {
     console.error("Failed to fetch clients:", error);
     return [];
-  } finally {
-    // await prismaInstance.$disconnect();
   }
-}
-
-export default async function AdminAppointmentsPage() {
-  const session = await getSession();
-  if (!session || (session.user.role !== "admin" && session.user.role !== "staff")) {
-    return {
-      redirect: {
-        destination: "/sign-in",
-        permanent: false,
-      },
-    };
-  }
-
-  const employeeId = session.user.role === "staff"
-    ? (await prismaInstance.employee.findFirst({
-        where: { userId: session.user.id },
-        select: { id: true },
-      }))?.id || null
-    : null;
-
-  const [appointments, services, clients] = await Promise.all([
-    fetchAppointments(session.user.id, session.user.role),
-    fetchServices(),
-    fetchClients(),
-  ]);
-
-  console.log(appointments, services, clients);
-
-  return (
-    <AppointmentsClient
-      initialAppointments={appointments}
-      services={services}
-      clients={clients}
-      userRole={session.user.role}
-      employeeId={employeeId}
-    />
-  );
 }

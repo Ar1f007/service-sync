@@ -1,5 +1,5 @@
 import EmployeeForm from "@/components/EmployeeForm";
-import { PrismaClient } from "@/generated/prisma";
+import prismaInstance from "@/lib/db";
 import { getSession } from "@/lib/session";
 
 export default async function NewEmployeePage() {
@@ -8,8 +8,7 @@ export default async function NewEmployeePage() {
     return new Response("Unauthorized", { status: 403 });
   }
 
-const prisma = new PrismaClient();
-  const services = await prisma.service.findMany({
+  const services = await prismaInstance.service.findMany({
     select: { id: true, title: true },
   });
 

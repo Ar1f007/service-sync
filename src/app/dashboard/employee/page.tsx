@@ -1,4 +1,3 @@
-import { PrismaClient } from "@/generated/prisma";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -7,33 +6,8 @@ import { format, startOfDay, endOfDay } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 import { formatPrice } from "@/lib/utils";
 import { getSession } from "@/lib/session";
+import prismaInstance from "@/lib/db";
 
-interface Service {
-  id: string;
-  title: string;
-  price: number;
-  duration: number;
-}
-
-interface Client {
-  id: string;
-  name: string | null;
-  email: string;
-}
-
-interface Appointment {
-  id: string;
-  service: { id: string; title: string; price: number; duration: number };
-  client: { id: string; name: string | null; email: string };
-  dateTime: Date;
-  status: string;
-}
-
-interface Employee {
-  id: string;
-  serviceEmployees: { service: Service }[];
-  appointments: Appointment[];
-}
 
 export default async function EmployeeDashboard() {
   const session = await getSession();
@@ -46,7 +20,6 @@ export default async function EmployeeDashboard() {
     };
   }
 
-  const prisma = new PrismaClient();
   const timezone = "Europe/London"; // Fallback, could use Intl.DateTimeFormat().resolvedOptions().timeZone
 
   try {
@@ -54,7 +27,7 @@ export default async function EmployeeDashboard() {
     const todayStart = startOfDay(fromZonedTime(now, timezone));
     const todayEnd = endOfDay(fromZonedTime(now, timezone));
 
-    const employee = await prisma.employee.findFirst({
+    const employee = await prismaInstance.employee.findFirst({
       where: { userId: session.user.id },
       include: {
         serviceEmployees: { include: { service: { select: { id: true, title: true, price: true, duration: true } } } },
@@ -100,7 +73,7 @@ export default async function EmployeeDashboard() {
               {employee.serviceEmployees.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {employee.serviceEmployees.map((se) => (
-                    <Badge key={se.service.id} variant="secondary" className="text-sm">
+                    <Badge key={se.service.id} variant="secondary" className="text-sm uppercase">
                       {se.service.title} ({formatPrice(se.service.price)})
                     </Badge>
                   ))}
@@ -154,6 +127,7 @@ export default async function EmployeeDashboard() {
                                 ? "bg-yellow-100 text-yellow-800"
                                 : "bg-red-100 text-red-800"
                             }
+                             style={{ textTransform : "uppercase" }}
                           >
                             {appt.status}
                           </Badge>
@@ -219,6 +193,7 @@ export default async function EmployeeDashboard() {
                                 ? "bg-yellow-100 text-yellow-800"
                                 : "bg-red-100 text-red-800"
                             }
+                             style={{ textTransform : "uppercase" }}
                           >
                             {appt.status}
                           </Badge>
@@ -249,6 +224,6 @@ export default async function EmployeeDashboard() {
       </div>
     );
   } finally {
-    await prisma.$disconnect();
+    // await prisma.$disconnect();
   }
 }

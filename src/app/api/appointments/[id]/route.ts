@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deleteAppointment, updateAppointment } from "@/lib/data/dashboard/appointments";
 
-// Define the params type properly
+
 type RouteContext = {
-  params: Promise<{ id: string }>; // Note: params is now a Promise in Next.js 15
+  params: Promise<{ id: string }>;
 };
 
 export async function PUT(request: NextRequest, context: RouteContext) { 
@@ -16,7 +16,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    // Await the params since it's now a Promise
+  
     const { id } = await context.params;
     const { searchParams } = new URL(request.url);
     const timezone = searchParams.get("timezone") || "Europe/London";

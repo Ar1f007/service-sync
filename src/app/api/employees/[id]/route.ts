@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
 import { endOfDay, startOfDay } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
+import prismaInstance from "@/lib/db";
 
-const prisma = new PrismaClient();
 
 // Define the params type properly
 type RouteContext = {
@@ -19,13 +18,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const { serviceIds } = await request.json();
 
     // Delete existing ServiceEmployee records
-    await prisma.serviceEmployee.deleteMany({
+    await prismaInstance.serviceEmployee.deleteMany({
       where: { employeeId: id },
     });
 
     // Create new ServiceEmployee records
     if (serviceIds && Array.isArray(serviceIds) && serviceIds.length > 0) {
-      await prisma.serviceEmployee.createMany({
+      await prismaInstance.serviceEmployee.createMany({
         data: serviceIds.map((serviceId: string) => ({
           employeeId: id,
           serviceId,
@@ -39,7 +38,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const tomorrow = endOfDay(fromZonedTime(now, timezone));
 
     // Fetch updated employee
-    const updatedEmployee = await prisma.employee.findUnique({
+    const updatedEmployee = await prismaInstance.employee.findUnique({
       where: { id },
       include: {
         user: { select: { name: true, email: true } },
@@ -69,7 +68,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     console.error("Failed to update employee:", error);
     return NextResponse.json({ error: error.message || "Failed to update employee" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }
 
@@ -79,17 +78,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
 
     // Delete related ServiceEmployee records
-    await prisma.serviceEmployee.deleteMany({
+    await prismaInstance.serviceEmployee.deleteMany({
       where: { employeeId: id },
     });
 
     // Delete related Appointment records
-    await prisma.appointment.deleteMany({
+    await prismaInstance.appointment.deleteMany({
       where: { employeeId: id },
     });
 
     // Delete the Employee
-    await prisma.employee.delete({
+    await prismaInstance.employee.delete({
       where: { id },
     });
 
@@ -101,6 +100,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
     return NextResponse.json({ error: error.message || "Failed to delete employee" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }

@@ -1,7 +1,6 @@
-import { PrismaClient } from "@/generated/prisma";
+import prismaInstance from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
-const prisma = new PrismaClient();
 
 // Define the params type properly
 type RouteContext = {
@@ -19,7 +18,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const service = await prisma.service.update({
+    const service = await prismaInstance.service.update({
       where: { id },
       data: {
         title,
@@ -35,7 +34,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     console.error("Failed to update service:", error);
     return NextResponse.json({ error: error.message || "Failed to update service" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }
 
@@ -44,14 +43,14 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Await the params since it's now a Promise
     const { id } = await context.params;
 
-    await prisma.$transaction([
-      prisma.serviceEmployee.deleteMany({
+    await prismaInstance.$transaction([
+      prismaInstance.serviceEmployee.deleteMany({
         where: { serviceId: id },
       }),
-      prisma.appointment.deleteMany({
+      prismaInstance.appointment.deleteMany({
         where: { serviceId: id },
       }),
-      prisma.service.delete({
+      prismaInstance.service.delete({
         where: { id },
       }),
     ]);
@@ -61,6 +60,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     console.error("Failed to delete service:", error);
     return NextResponse.json({ error: error.message || "Failed to delete service" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }

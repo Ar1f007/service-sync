@@ -1,13 +1,12 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
-import { PrismaClient } from "@/generated/prisma";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { ObjectId } from "mongodb"
+import prismaInstance from "./db";
 
-const prisma = new PrismaClient();
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
+  database: prismaAdapter(prismaInstance, {
     provider: "mongodb",
   }),
   emailAndPassword: {

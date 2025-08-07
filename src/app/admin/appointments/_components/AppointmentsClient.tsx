@@ -365,6 +365,7 @@ export default function AppointmentsClient({
                                 ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
                                 : "bg-red-100 text-red-800 hover:bg-red-200"
                             }
+                            style={{ textTransform : "uppercase" }}
                           >
                             {appt.status === "confirmed" && <CheckCircle className="w-3 h-3 mr-1" />}
                             {appt.status === "cancelled" && <XCircle className="w-3 h-3 mr-1" />}

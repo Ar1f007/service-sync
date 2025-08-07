@@ -1,6 +1,7 @@
-import { PrismaClient } from "@/generated/prisma";
+import prismaInstance from "@/lib/db";
 import EmployeesClient from "./_components/EmployeeClient";
 import { getSession } from "@/lib/session";
+import { addDays, startOfToday } from "date-fns";
 
 interface Service {
   id: string;
@@ -22,11 +23,11 @@ interface Employee {
 }
 
 async function fetchEmployees(): Promise<Employee[]> {
-  const prisma = new PrismaClient();
+
   try {
-    const today = new Date("2025-08-05T00:00:00+06:00");
-    const tomorrow = new Date("2025-08-06T00:00:00+06:00");
-    const employees = await prisma.employee.findMany({
+    const today = startOfToday();
+    const tomorrow = addDays(today, 1);
+    const employees = await prismaInstance.employee.findMany({
       include: {
         user: { select: { name: true, email: true } },
         serviceEmployees: { include: { service: { select: { id: true, title: true } } } },
@@ -50,14 +51,12 @@ async function fetchEmployees(): Promise<Employee[]> {
     console.error("Failed to fetch employees:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
   }
 }
 
 async function fetchAvailableUsers(): Promise<User[]> {
-  const prisma = new PrismaClient();
   try {
-    const users = await prisma.user.findMany({
+    const users = await prismaInstance.user.findMany({
       where: {
         employeeInfo: { none: {} }, // Users without Employee relation
       },
@@ -73,14 +72,12 @@ async function fetchAvailableUsers(): Promise<User[]> {
     console.error("Failed to fetch available users:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
   }
 }
 
 async function fetchServices(): Promise<Service[]> {
-  const prisma = new PrismaClient();
   try {
-    const services = await prisma.service.findMany({
+    const services = await prismaInstance.service.findMany({
       select: { id: true, title: true },
     });
     return services;
@@ -88,7 +85,6 @@ async function fetchServices(): Promise<Service[]> {
     console.error("Failed to fetch services:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
   }
 }
 

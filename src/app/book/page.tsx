@@ -1,6 +1,6 @@
-import { PrismaClient } from "@/generated/prisma";
 import BookClient from "./_components/BookClient";
 import { Suspense } from "react";
+import prismaInstance from "@/lib/db";
 
 interface Service {
   id: string;
@@ -12,9 +12,8 @@ interface Service {
 }
 
 async function fetchServices(): Promise<Service[]> {
-  const prisma = new PrismaClient();
   try {
-    const services = await prisma.service.findMany({
+    const services = await prismaInstance.service.findMany({
       select: {
         id: true,
         title: true,
@@ -29,7 +28,6 @@ async function fetchServices(): Promise<Service[]> {
     console.error("Failed to fetch services:", error);
     return [];
   } finally {
-    await prisma.$disconnect();
   }
 }
 

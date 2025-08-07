@@ -42,7 +42,7 @@ export default function Navbar() {
 		},
 		{ href: "/admin/services", label: "Manage Services", admin: true },
 		{ href: "/admin/employees", label: "Manage Staff", admin: true },
-		{ href: "/admin/appointments", label: "All Appointments", admin: true },
+		{ href: "/admin/all-appointments", label: "All Appointments", admin: true },
 	];
 
 	const visibleLinks = navigationLinks.filter((link) => {

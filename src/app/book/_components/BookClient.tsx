@@ -212,7 +212,7 @@ export default function BookClient({ services }: BookClientProps) {
           employeeId: data.employeeId,
           clientId: session?.user?.id,
           dateTime,
-          status: "confirmed",
+          status: "pending",
           timezone,
         }),
       })

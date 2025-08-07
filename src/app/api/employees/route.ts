@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
 import { auth } from "@/lib/auth";
 import {  fromZonedTime } from "date-fns-tz";
 import { startOfDay, endOfDay } from "date-fns";
+import prismaInstance from "@/lib/db";
 
-const prisma = new PrismaClient();
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -17,7 +16,7 @@ export async function GET(request: Request) {
     const today = startOfDay(fromZonedTime(now, timezone));
     const tomorrow = endOfDay(fromZonedTime(now, timezone));
 
-    const employees = await prisma.employee.findMany({
+    const employees = await prismaInstance.employee.findMany({
       where: serviceId ? { serviceEmployees: { some: { serviceId } } } : {},
       include: {
         user: { select: { name: true, email: true } },
@@ -45,7 +44,7 @@ export async function GET(request: Request) {
     console.error("Failed to fetch employees:", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prisma.$disconnect();
   }
 }
 
@@ -62,25 +61,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing or invalid fields" }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prismaInstance.user.findUnique({ where: { id: userId } });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     // Update user role to "staff"
-    await prisma.user.update({
+    await prismaInstance.user.update({
       where: { id: userId },
       data: { role: "staff" },
     });
 
     // Create Employee
-    const employee = await prisma.employee.create({
+    const employee = await prismaInstance.employee.create({
       data: { userId },
     });
 
     // Create ServiceEmployee records
     if (serviceIds.length > 0) {
-      await prisma.serviceEmployee.createMany({
+      await prismaInstance.serviceEmployee.createMany({
         data: serviceIds.map((serviceId: string) => ({
           employeeId: employee.id,
           serviceId,
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
     const tomorrow = endOfDay(fromZonedTime(now, timezone));
 
     // Fetch the created employee with relations
-    const newEmployee = await prisma.employee.findUnique({
+    const newEmployee = await prismaInstance.employee.findUnique({
       where: { id: employee.id },
       include: {
         user: { select: { name: true, email: true } },
@@ -123,6 +122,6 @@ export async function POST(request: Request) {
     console.error("Failed to create employee:", error);
     return NextResponse.json({ error: error.message || "Failed to create employee" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }

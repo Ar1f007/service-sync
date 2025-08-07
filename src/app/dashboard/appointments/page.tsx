@@ -84,6 +84,7 @@ export default async function ClientAppointmentsPage() {
                               ? "bg-yellow-100 text-yellow-800"
                               : "bg-red-100 text-red-800"
                           }
+                          style={{ textTransform : "uppercase" }}
                         >
                           {appt.status}
                         </Badge>
@@ -148,6 +149,7 @@ export default async function ClientAppointmentsPage() {
                               ? "bg-yellow-100 text-yellow-800"
                               : "bg-red-100 text-red-800"
                           }
+                           style={{ textTransform : "uppercase" }}
                         >
                           {appt.status}
                         </Badge>

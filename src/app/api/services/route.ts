@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { PrismaClient } from "@/generated/prisma";
+import prismaInstance from "@/lib/db";
 
-const prisma = new PrismaClient();
 
 export async function GET() {
 	try {
-		const services = await prisma.service.findMany({
+		const services = await prismaInstance.service.findMany({
 			select: {
 				id: true,
 				title: true,
@@ -24,7 +23,7 @@ export async function GET() {
 			{ status: 500 },
 		);
 	} finally {
-		await prisma.$disconnect();
+		// await prismaInstance.$disconnect();
 	}
 }
 
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
 			);
 		}
 
-		const service = await prisma.service.create({
+		const service = await prismaInstance.service.create({
 			data: {
 				title,
 				description,
@@ -70,6 +69,6 @@ export async function POST(request: Request) {
 			{ status: 500 },
 		);
 	} finally {
-		await prisma.$disconnect();
+		// await prismaInstance.$disconnect();
 	}
 }

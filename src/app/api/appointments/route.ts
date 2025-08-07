@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/prisma";
 import { auth } from "@/lib/auth";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
-
-const prisma = new PrismaClient();
+import prismaInstance from "@/lib/db";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -19,7 +17,7 @@ export async function GET(request: Request) {
   try {
     const where: any = {};
     if (session.user.role === "staff") {
-      const employee = await prisma.employee.findFirst({
+      const employee = await prismaInstance.employee.findFirst({
         where: { userId: session.user.id },
         select: { id: true },
       });
@@ -44,7 +42,7 @@ export async function GET(request: Request) {
       };
     }
 
-    const appointments = await prisma.appointment.findMany({
+    const appointments = await prismaInstance.appointment.findMany({
       where,
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
@@ -67,7 +65,7 @@ export async function GET(request: Request) {
     console.error("Failed to fetch appointments:", error);
     return NextResponse.json({ error: "Failed to fetch appointments" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }
 
@@ -78,7 +76,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { serviceId, employeeId, clientId, dateTime, status, timezone = "Europe/London" } = await request.json();
+    const { serviceId, employeeId, clientId, dateTime, status = "pending", timezone = "Europe/London" } = await request.json();
 
     if (!serviceId || !employeeId || !clientId || !dateTime || !status) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -91,19 +89,19 @@ export async function POST(request: Request) {
 
     // Validate relations
     const [service, client, employee, serviceEmployee] = await Promise.all([
-      prisma.service.findUnique({
+      prismaInstance.service.findUnique({
         where: { id: serviceId },
         select: { id: true, title: true, price: true, duration: true },
       }),
-      prisma.user.findUnique({
+      prismaInstance.user.findUnique({
         where: { id: clientId },
         select: { id: true, name: true },
       }),
-      prisma.employee.findUnique({
+      prismaInstance.employee.findUnique({
         where: { id: employeeId },
         include: { user: { select: { id: true, name: true } } },
       }),
-      prisma.serviceEmployee.findFirst({
+      prismaInstance.serviceEmployee.findFirst({
         where: { serviceId, employeeId },
       }),
     ]);
@@ -118,7 +116,7 @@ export async function POST(request: Request) {
     // Conflict check
     const start = fromZonedTime(new Date(dateTime), timezone);
     const end = new Date(start.getTime() + service.duration * 60 * 1000);
-    const conflicting = await prisma.appointment.findFirst({
+    const conflicting = await prismaInstance.appointment.findFirst({
       where: {
         employeeId,
         dateTime: {
@@ -131,13 +129,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Time slot unavailable" }, { status: 409 });
     }
 
-    const appointment = await prisma.appointment.create({
+    const appointment = await prismaInstance.appointment.create({
       data: {
         serviceId,
         employeeId,
         clientId,
         dateTime: start,
-        status: "pending",
+        status: status || "pending",
       },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
@@ -161,6 +159,6 @@ export async function POST(request: Request) {
     console.error("Failed to create appointment:", error);
     return NextResponse.json({ error: error.message || "Failed to create appointment" }, { status: 500 });
   } finally {
-    await prisma.$disconnect();
+    // await prismaInstance.$disconnect();
   }
 }
