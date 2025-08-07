@@ -15,11 +15,11 @@ import { Loader2, CalendarIcon, Clock, User, CheckCircle, AlertCircle, ArrowLeft
 import { formatPrice, cn } from "@/lib/utils"
 import Link from "next/link"
 import { z } from "zod"
-import { toZonedTime } from "date-fns-tz"
-import { format } from "date-fns"
+import { toZonedTime, fromZonedTime } from "date-fns-tz"
+import { format, isValid } from "date-fns"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Alert, AlertDescription } from "@/components/ui/alert" // Import Alert components
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface Service {
   id: string
@@ -65,7 +65,8 @@ export default function BookClient({ services }: BookClientProps) {
   const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([])
   const [timeSlots, setTimeSlots] = useState<string[]>([])
   const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false)
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London"  
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false) // Add state for calendar popover
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London"
 
   const form = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
@@ -114,7 +115,6 @@ export default function BookClient({ services }: BookClientProps) {
         if (!response.ok) throw new Error("Failed to fetch employees")
         const data = await response.json()
         setAvailableEmployees(data.employees || [])
-        // Auto-select employee if only one is available
         if (data.employees?.length === 1) {
           form.setValue("employeeId", data.employees[0].id)
         } else {
@@ -136,10 +136,18 @@ export default function BookClient({ services }: BookClientProps) {
     }
 
     async function fetchTimeSlots() {
-      setIsLoadingTimeSlots(true) // Set loading to true
+      setIsLoadingTimeSlots(true)
       try {
         const selectedService = services.find((s) => s.id === serviceId)
-        if (!selectedService) return
+        if (!selectedService) throw new Error("Service not found")
+
+        // Validate selectedDate format (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+        if (!dateRegex.test(selectedDate)) {
+          console.error(`Invalid selectedDate format: ${selectedDate}`)
+          setTimeSlots([])
+          return
+        }
 
         // Generate time slots (9:00 AM to 5:30 PM, 30-min intervals)
         const startHour = 9
@@ -160,32 +168,73 @@ export default function BookClient({ services }: BookClientProps) {
             method: "GET",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-          },
+          }
         )
+
         if (!response.ok) throw new Error("Failed to fetch appointments")
         const { appointments }: { appointments: Appointment[] } = await response.json()
 
         // Filter out conflicting time slots
         const duration = selectedService.duration
         const availableSlots = slots.filter((slot) => {
-          const slotDateTime = toZonedTime(new Date(`${selectedDate}T${slot}:00`), timezone)
+          // Create slot start time in Asia/Dhaka timezone
+          const slotDateTimeStr = `${selectedDate}T${slot}:00`
+          const slotDate = new Date(slotDateTimeStr)
+          if (!isValid(slotDate)) {
+            console.error(`Invalid slot date: ${slotDateTimeStr}`)
+            return false
+          }
+          const slotStart = toZonedTime(slotDate, timezone)
+          const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000)
+
+          // Validate slotStart and slotEnd
+          if (!isValid(slotStart) || !isValid(slotEnd)) {
+            console.error(`Invalid slot times: start=${slotStart}, end=${slotEnd}`)
+            return false
+          }
+
+          console.log(`Checking slot: ${slotDateTimeStr} (${slotStart.toISOString()} to ${slotEnd.toISOString()})`)
+
+          // Check for conflicts with existing appointments
           return !appointments.some((appt) => {
-            const apptStart = new Date(appt.dateTime)
-            const apptEnd = new Date(apptStart.getTime() + appt.duration * 60 * 1000)
-            const slotEnd = new Date(slotDateTime.getTime() + duration * 60 * 1000)
-            return (
-              (slotDateTime >= apptStart && slotDateTime < apptEnd) ||
-              (slotEnd > apptStart && slotEnd <= apptEnd) ||
-              (slotDateTime <= apptStart && slotEnd >= apptEnd)
+            // Validate appt.dateTime
+            const apptDate = new Date(appt.dateTime)
+            if (!isValid(apptDate)) {
+              console.error(`Invalid appointment dateTime: ${appt.dateTime}`)
+              return false
+            }
+            const apptStart = toZonedTime(apptDate, timezone)
+            const apptEnd = new Date(apptStart.getTime() + (appt.duration || 30) * 60 * 1000)
+
+            if (!isValid(apptStart) || !isValid(apptEnd)) {
+              console.error(`Invalid appointment times: start=${apptStart}, end=${apptEnd}`)
+              return false
+            }
+
+            console.log(
+              `  Against appt ${appt.id}: ${appt.dateTime} (${apptStart.toISOString()} to ${apptEnd.toISOString()})`
             )
+
+            // Check for overlap
+            const hasOverlap =
+              (slotStart >= apptStart && slotStart < apptEnd) ||
+              (slotEnd > apptStart && slotEnd <= apptEnd) ||
+              (slotStart <= apptStart && slotEnd >= apptEnd)
+
+            if (hasOverlap) {
+              console.log(`  Conflict found with appt ${appt.id}`)
+            }
+            return hasOverlap
           })
         })
+
+        console.log(`Available slots for ${selectedDate}:`, availableSlots)
         setTimeSlots(availableSlots)
       } catch (error) {
         console.error("Error fetching time slots:", error)
         setTimeSlots([])
       } finally {
-        setIsLoadingTimeSlots(false) // Set loading to false
+        setIsLoadingTimeSlots(false)
       }
     }
     fetchTimeSlots()
@@ -196,7 +245,7 @@ export default function BookClient({ services }: BookClientProps) {
 
   const onSubmit = async (data: BookingFormData) => {
     setBookingStatus("loading")
-    form.clearErrors("root") // Clear previous root errors
+    form.clearErrors("root")
     try {
       const selectedService = services.find((s) => s.id === data.serviceId)
       if (!selectedService) throw new Error("Service not found")
@@ -296,9 +345,8 @@ export default function BookClient({ services }: BookClientProps) {
               {services.map((service) => (
                 <Card
                   key={service.id}
-                  className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
-                    serviceId === service.id ? "ring-2 ring-teal-500 bg-teal-50" : "hover:border-teal-200"
-                  }`}
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md ${serviceId === service.id ? "ring-2 ring-teal-500 bg-teal-50" : "hover:border-teal-200"
+                    }`}
                   onClick={() => {
                     form.setValue("serviceId", service.id)
                     setIsBookingDialogOpen(true)
@@ -420,14 +468,14 @@ export default function BookClient({ services }: BookClientProps) {
                     />
                   )}
 
-                  {/* Date Selection with Shadcn Calendar */}
+                  {/* Date Selection with Shadcn Calendar - FIXED VERSION */}
                   <FormField
                     control={form.control}
                     name="date"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
                         <FormLabel>Select Date</FormLabel>
-                        <Popover>
+                        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                           <PopoverTrigger asChild>
                             <FormControl>
                               <Button
@@ -448,13 +496,15 @@ export default function BookClient({ services }: BookClientProps) {
                               selected={field.value ? new Date(field.value) : undefined}
                               onSelect={(date) => {
                                 if (date) {
-                                  field.onChange(format(date, "yyyy-MM-dd")) // Store as YYYY-MM-DD string
+                                  field.onChange(format(date, "yyyy-MM-dd"))
+                                  form.setValue("time", "") // Reset time selection when date changes
+                                  setIsCalendarOpen(false) // Close the calendar popover
                                 } else {
-                                  field.onChange("") // Clear if no date selected
+                                  field.onChange("")
                                 }
                               }}
                               initialFocus
-                              disabled={(date) => date < new Date()} // Disable past dates
+                              disabled={(date) => date < new Date()}
                             />
                           </PopoverContent>
                         </Popover>
