@@ -1,8 +1,8 @@
-import { PrismaClient } from "@/generated/prisma";
+const { PrismaClient } = require("../../src/generated/prisma/client");
 
 const prisma = new PrismaClient();
 
-async function setAdmin(email: string) {
+async function setAdmin(email) {
   await prisma.user.update({
     where: { email },
     data: { role: "admin" },
@@ -10,4 +10,4 @@ async function setAdmin(email: string) {
   console.log(`User ${email} set to admin`);
 }
 
-setAdmin("admin@example.com").then(() => prisma.$disconnect());
+setAdmin("admin@gmail.com").then(() => prisma.$disconnect());

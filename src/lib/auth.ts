@@ -18,7 +18,7 @@ export const auth = betterAuth({
       role: {
         type: "string",
         default: "client", 
-      },
+      },      
     },
   },
   plugins: [nextCookies()],

@@ -36,7 +36,8 @@ export default function AuthForm() {
             email,
             password,
             name,
-            callbackURL: "/dashboard",
+            callbackURL: "/",
+            role: "client",            
         });
         if (error) {
             setError(error?.message || "Something went wrong!");

@@ -5,7 +5,10 @@ export async function middleware(request: NextRequest) {
 	const sessionCookie = getSessionCookie(request);
 
 	if (!sessionCookie) {
-		return NextResponse.redirect(new URL("/sign-in", request.url));
+		 const path = request.nextUrl.pathname
+		  const redirectUrl = new URL("/sign-in", request.url)
+      redirectUrl.searchParams.set("redirect", path + request.nextUrl.search)
+      return NextResponse.redirect(redirectUrl)
 	}
 
 	return NextResponse.next();
@@ -13,5 +16,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
 	// runtime: "nodejs",
-	matcher: ["/dashboard/:path*", "/admin/:path*"],
+	matcher: ["/book" , "/dashboard/:path*", "/admin/:path*"],
 };

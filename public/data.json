@@ -1,0 +1,37 @@
+{
+    "services": [
+  {
+    "id": "1",
+    "title": "Premium Haircut & Style",
+    "description": "Professional haircut with wash, style, and finishing touches. Includes consultation to achieve your perfect look.",
+    "features": ["Consultation", "Wash & Cut", "Professional Styling", "Finishing Products"],
+    "duration": 60,
+    "price": 85.0
+  },
+  {
+    "id": "2",
+    "title": "Relaxing Deep Tissue Massage",
+    "description": "Therapeutic massage targeting muscle tension and stress relief. Perfect for unwinding after a long week.",
+    "features": ["Deep Tissue Technique", "Aromatherapy", "Hot Towel Treatment", "Relaxation Music"],
+    "duration": 90,
+    "price": 120.0
+  },
+  {
+    "id": "3",
+    "title": "Signature Facial Treatment",
+    "description": "Customized facial treatment designed for your skin type. Includes cleansing, exfoliation, and moisturizing.",
+    "features": ["Skin Analysis", "Deep Cleansing", "Exfoliation", "Hydrating Mask", "Moisturizing"],
+    "duration": 75,
+    "price": 95.0
+  },
+  {
+    "id": "4",
+    "title": "Manicure & Pedicure Combo",
+    "description": "Complete nail care package including shaping, cuticle care, and polish application.",
+    "features": ["Nail Shaping", "Cuticle Care", "Exfoliation", "Polish Application", "Hand Massage"],
+    "duration": 120,
+    "price": 65.0
+  }
+]
+
+}

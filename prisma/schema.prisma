@@ -25,7 +25,10 @@ model User {
   image         String?
   sessions      Session[]
   accounts      Account[]
+  appointments  Appointment[] @relation("ClientAppointments")
 
+  services     Service[]  @relation("ServiceCreator")
+  employeeInfo Employee[] @relation("EmployeeUser")
   @@map("user")
 }
 
@@ -73,3 +76,60 @@ model Verification {
 
   @@map("verification")
 }
+
+model Service {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  features    String[]        // e.g., ["Shampoo", "Blow Dry"]
+  duration    Int             // Duration in minutes
+  price       Float
+  createdBy   String          @db.ObjectId
+  creator     User            @relation("ServiceCreator", fields: [createdBy], references: [id])
+  serviceEmployees ServiceEmployee[] // Explicit join collection
+  appointments Appointment[]   @relation("ServiceAppointments")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("service")
+}
+
+model Employee {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String          @db.ObjectId
+  user        User            @relation("EmployeeUser", fields: [userId], references: [id])
+  serviceEmployees ServiceEmployee[] // Explicit join collection
+  appointments Appointment[]   @relation("EmployeeAppointments")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("employee")
+}
+
+model ServiceEmployee {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  serviceId  String   @db.ObjectId
+  employeeId String   @db.ObjectId
+  service    Service  @relation(fields: [serviceId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@map("serviceEmployee")
+}
+
+model Appointment {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  clientId   String   @db.ObjectId
+  client     User     @relation("ClientAppointments", fields: [clientId], references: [id])
+  serviceId  String   @db.ObjectId
+  service    Service  @relation("ServiceAppointments", fields: [serviceId], references: [id])
+  employeeId String   @db.ObjectId
+  employee   Employee @relation("EmployeeAppointments", fields: [employeeId], references: [id])
+  dateTime   DateTime
+  status     String   @default("pending") // e.g., "pending", "confirmed", "canceled"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("appointment")
+}
+

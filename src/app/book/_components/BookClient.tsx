@@ -1,0 +1,585 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { authClient } from "@/lib/auth-client"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Loader2, CalendarIcon, Clock, User, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react'
+import { formatPrice, cn } from "@/lib/utils"
+import Link from "next/link"
+import { z } from "zod"
+import { toZonedTime } from "date-fns-tz"
+import { format } from "date-fns"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Alert, AlertDescription } from "@/components/ui/alert" // Import Alert components
+
+interface Service {
+  id: string
+  title: string
+  description: string | null
+  features: string[]
+  duration: number
+  price: number
+}
+
+interface Employee {
+  id: string
+  user: { name: string; email: string }
+  serviceEmployees: { serviceId: string }[]
+}
+
+interface Appointment {
+  id: string
+  employeeId: string
+  dateTime: string
+  duration: number
+}
+
+export const bookingSchema = z.object({
+  serviceId: z.string().min(1, "Service is required"),
+  employeeId: z.string().min(1, "Employee is required"),
+  date: z.string().min(1, "Date is required"),
+  time: z.string().min(1, "Time is required"),
+})
+
+export type BookingFormData = z.infer<typeof bookingSchema>
+
+interface BookClientProps {
+  services: Service[]
+}
+
+export default function BookClient({ services }: BookClientProps) {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const { data: session, isPending } = authClient.useSession()
+  const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false)
+  const [bookingStatus, setBookingStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
+  const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([])
+  const [timeSlots, setTimeSlots] = useState<string[]>([])
+  const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London"  
+
+  const form = useForm<BookingFormData>({
+    resolver: zodResolver(bookingSchema),
+    defaultValues: {
+      serviceId: "",
+      employeeId: "",
+      date: "",
+      time: "",
+    },
+  })
+
+  const serviceId = form.watch("serviceId")
+  const selectedDate = form.watch("date")
+  const selectedTime = form.watch("time")
+  const employeeId = form.watch("employeeId")
+
+  // Get service from URL params
+  const serviceIdFromUrl = searchParams.get("service")
+
+  useEffect(() => {
+    if (isPending) return
+    if (!session) {
+      const currentUrl = window.location.pathname + window.location.search
+      localStorage.setItem("redirectAfterAuth", currentUrl)
+      router.push("/sign-in")
+    }
+  }, [session, isPending, router])
+
+  useEffect(() => {
+    if (serviceIdFromUrl) {
+      form.setValue("serviceId", serviceIdFromUrl)
+      setIsBookingDialogOpen(true)
+    }
+  }, [serviceIdFromUrl, form])
+
+  // Fetch employees for selected service
+  useEffect(() => {
+    if (!serviceId) return
+    async function fetchEmployees() {
+      try {
+        const response = await fetch(`/api/employees?serviceId=${serviceId}&timezone=${encodeURIComponent(timezone)}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+        })
+        if (!response.ok) throw new Error("Failed to fetch employees")
+        const data = await response.json()
+        setAvailableEmployees(data.employees || [])
+        // Auto-select employee if only one is available
+        if (data.employees?.length === 1) {
+          form.setValue("employeeId", data.employees[0].id)
+        } else {
+          form.setValue("employeeId", "")
+        }
+      } catch (error) {
+        console.error("Error fetching employees:", error)
+        setAvailableEmployees([])
+      }
+    }
+    fetchEmployees()
+  }, [serviceId, form, timezone])
+
+  // Generate and filter time slots based on employee availability
+  useEffect(() => {
+    if (!serviceId || !selectedDate || !employeeId) {
+      setTimeSlots([])
+      return
+    }
+
+    async function fetchTimeSlots() {
+      setIsLoadingTimeSlots(true) // Set loading to true
+      try {
+        const selectedService = services.find((s) => s.id === serviceId)
+        if (!selectedService) return
+
+        // Generate time slots (9:00 AM to 5:30 PM, 30-min intervals)
+        const startHour = 9
+        const endHour = 17.5 // 5:30 PM
+        const interval = 30 // minutes
+        const slots: string[] = []
+        for (let hour = startHour; hour <= endHour; hour += interval / 60) {
+          const hours = Math.floor(hour)
+          const minutes = (hour % 1) * 60
+          const time = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+          slots.push(time)
+        }
+
+        // Fetch existing appointments for conflict checking
+        const response = await fetch(
+          `/api/appointments?employeeId=${employeeId}&date=${selectedDate}&timezone=${encodeURIComponent(timezone)}`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+          },
+        )
+        if (!response.ok) throw new Error("Failed to fetch appointments")
+        const { appointments }: { appointments: Appointment[] } = await response.json()
+
+        // Filter out conflicting time slots
+        const duration = selectedService.duration
+        const availableSlots = slots.filter((slot) => {
+          const slotDateTime = toZonedTime(new Date(`${selectedDate}T${slot}:00`), timezone)
+          return !appointments.some((appt) => {
+            const apptStart = new Date(appt.dateTime)
+            const apptEnd = new Date(apptStart.getTime() + appt.duration * 60 * 1000)
+            const slotEnd = new Date(slotDateTime.getTime() + duration * 60 * 1000)
+            return (
+              (slotDateTime >= apptStart && slotDateTime < apptEnd) ||
+              (slotEnd > apptStart && slotEnd <= apptEnd) ||
+              (slotDateTime <= apptStart && slotEnd >= apptEnd)
+            )
+          })
+        })
+        setTimeSlots(availableSlots)
+      } catch (error) {
+        console.error("Error fetching time slots:", error)
+        setTimeSlots([])
+      } finally {
+        setIsLoadingTimeSlots(false) // Set loading to false
+      }
+    }
+    fetchTimeSlots()
+  }, [serviceId, selectedDate, employeeId, services, timezone])
+
+  const selectedServiceData = services.find((s) => s.id === serviceId)
+  const selectedEmployeeData = availableEmployees.find((e) => e.id === employeeId)
+
+  const onSubmit = async (data: BookingFormData) => {
+    setBookingStatus("loading")
+    form.clearErrors("root") // Clear previous root errors
+    try {
+      const selectedService = services.find((s) => s.id === data.serviceId)
+      if (!selectedService) throw new Error("Service not found")
+
+      const dateTime = toZonedTime(new Date(`${data.date}T${data.time}:00`), timezone).toISOString()
+
+      const response = await fetch(`/api/appointments?timezone=${encodeURIComponent(timezone)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          serviceId: data.serviceId,
+          employeeId: data.employeeId,
+          clientId: session?.user?.id,
+          dateTime,
+          status: "confirmed",
+          timezone,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to book appointment")
+      }
+
+      setBookingStatus("success")
+      form.reset()
+      setTimeout(() => {
+        setIsBookingDialogOpen(false)
+        setBookingStatus("idle")
+        router.push("/dashboard/appointments")
+      }, 2000)
+    } catch (error: any) {
+      setBookingStatus("error")
+      form.setError("root", { message: error.message || "Failed to book appointment" })
+      setTimeout(() => setBookingStatus("idle"), 3000)
+    }
+  }
+
+  if (isPending) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-teal-600" />
+            <p className="text-slate-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return null // Will redirect to sign-in by useEffect
+  }
+
+  if (services.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <p className="text-red-500 text-lg">No services available. Please try again later.</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Back Button */}
+        <div className="mb-6">
+          <Button variant="ghost" asChild className="text-slate-600 hover:text-slate-900">
+            <Link href="/services">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Services
+            </Link>
+          </Button>
+        </div>
+
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-slate-900 mb-4">Book Your Appointment</h1>
+          <p className="text-xl text-slate-600">Choose your service and preferred time to get started.</p>
+        </div>
+
+        {/* Service Selection */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <CalendarIcon className="w-5 h-5 mr-2 text-teal-700" />
+              Select Service
+            </CardTitle>
+            <CardDescription>Choose the service you'd like to book</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {services.map((service) => (
+                <Card
+                  key={service.id}
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md ${
+                    serviceId === service.id ? "ring-2 ring-teal-500 bg-teal-50" : "hover:border-teal-200"
+                  }`}
+                  onClick={() => {
+                    form.setValue("serviceId", service.id)
+                    setIsBookingDialogOpen(true)
+                  }}
+                >
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">{service.title}</CardTitle>
+                    <CardDescription className="text-sm">{service.description || "No description available"}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center text-slate-600">
+                        <Clock className="w-4 h-4 mr-1" />
+                        {service.duration} min
+                      </span>
+                      <span className="font-semibold text-slate-900">{formatPrice(service.price)}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Booking Dialog */}
+        <Dialog open={isBookingDialogOpen} onOpenChange={setIsBookingDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <CalendarIcon className="w-5 h-5 mr-2 text-teal-700" />
+                Complete Your Booking
+              </DialogTitle>
+              <DialogDescription>Fill in the details to confirm your appointment</DialogDescription>
+            </DialogHeader>
+
+            {bookingStatus === "success" ? (
+              <div className="text-center py-6">
+                <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Booking Confirmed!</h3>
+                <p className="text-slate-600">Your appointment has been successfully booked. Redirecting...</p>
+              </div>
+            ) : (
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  {/* Display root error message */}
+                  {form.formState.errors.root?.message && (
+                    <Alert className="mb-4 border-red-200 bg-red-50">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-red-800">
+                        {form.formState.errors.root.message}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Service Display */}
+                  {selectedServiceData && (
+                    <div className="bg-slate-50 p-3 rounded-lg">
+                      <h4 className="font-medium text-slate-900">{selectedServiceData.title}</h4>
+                      <p className="text-sm text-slate-600">
+                        {selectedServiceData.duration} min • {formatPrice(selectedServiceData.price)}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Service Selection (hidden if pre-selected from URL) */}
+                  <FormField
+                    control={form.control}
+                    name="serviceId"
+                    render={({ field }) => (
+                      <FormItem className={serviceIdFromUrl ? "hidden" : ""}>
+                        <FormLabel>Service</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a service" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {services.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.title} - {formatPrice(s.price)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Staff Selection (hidden if only one employee) */}
+                  {availableEmployees.length > 1 && (
+                    <FormField
+                      control={form.control}
+                      name="employeeId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Select Staff Member</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={!serviceId}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Choose your preferred staff member" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {availableEmployees.map((employee) => (
+                                <SelectItem key={employee.id} value={employee.id}>
+                                  <div className="flex items-center">
+                                    <User className="w-4 h-4 mr-2" />
+                                    {employee.user.name}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {/* Date Selection with Shadcn Calendar */}
+                  <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Select Date</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className={cn(
+                                  "w-full justify-start text-left font-normal",
+                                  !field.value && "text-muted-foreground",
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {field.value ? format(new Date(field.value), "PPP") : <span>Pick a date</span>}
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={field.value ? new Date(field.value) : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  field.onChange(format(date, "yyyy-MM-dd")) // Store as YYYY-MM-DD string
+                                } else {
+                                  field.onChange("") // Clear if no date selected
+                                }
+                              }}
+                              initialFocus
+                              disabled={(date) => date < new Date()} // Disable past dates
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Time Selection */}
+                  <FormField
+                    control={form.control}
+                    name="time"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Select Time</FormLabel>
+                        <FormControl>
+                          <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto">
+                            {isLoadingTimeSlots ? (
+                              <div className="col-span-3 text-center py-4">
+                                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-teal-600" />
+                                <p className="text-sm text-slate-600">Fetching available times...</p>
+                              </div>
+                            ) : timeSlots.length > 0 ? (
+                              timeSlots.map((time) => (
+                                <Button
+                                  key={time}
+                                  variant={field.value === time ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => field.onChange(time)}
+                                  className={field.value === time ? "bg-teal-700 hover:bg-teal-800" : ""}
+                                  type="button"
+                                >
+                                  {time}
+                                </Button>
+                              ))
+                            ) : (
+                              <p className="text-sm text-slate-600 col-span-3">
+                                No available time slots. Please select a different date or employee.
+                              </p>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Booking Summary */}
+                  {selectedServiceData && selectedEmployeeData && selectedDate && selectedTime && (
+                    <div className="bg-slate-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-slate-900 mb-2">Booking Summary</h4>
+                      <div className="space-y-1 text-sm text-slate-600">
+                        <p>
+                          <strong>Service:</strong> {selectedServiceData.title}
+                        </p>
+                        <p>
+                          <strong>Staff:</strong> {selectedEmployeeData.user.name}
+                        </p>
+                        <p>
+                          <strong>Date:</strong> {new Date(selectedDate).toLocaleDateString()}
+                        </p>
+                        <p>
+                          <strong>Time:</strong> {selectedTime}
+                        </p>
+                        <p>
+                          <strong>Duration:</strong> {selectedServiceData.duration} minutes
+                        </p>
+                        <p>
+                          <strong>Total:</strong> {formatPrice(selectedServiceData.price)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex space-x-2 pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsBookingDialogOpen(false)}
+                      className="flex-1"
+                      disabled={bookingStatus === "loading"}
+                      type="button"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={bookingStatus === "loading" || !timeSlots.length}
+                      className="flex-1 bg-teal-700 hover:bg-teal-800 text-white"
+                    >
+                      {bookingStatus === "loading" ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Booking...
+                        </>
+                      ) : (
+                        "Confirm Booking"
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Info Section */}
+        <Card className="bg-gradient-to-r from-teal-50 to-blue-50 border-teal-200">
+          <CardContent className="p-6">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                <AlertCircle className="w-6 h-6 text-teal-700" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 mb-2">Booking Information</h3>
+                <ul className="text-sm text-slate-600 space-y-1">
+                  <li>• Appointments can be cancelled up to 24 hours in advance</li>
+                  <li>• Please arrive 10 minutes early for your appointment</li>
+                  <li>• A confirmation email will be sent to you shortly</li>
+                  <li>• For questions, contact us at (555) 123-4567</li>
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
