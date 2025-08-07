@@ -113,7 +113,6 @@ export default async function AdminAppointmentsPage() {
     fetchClients(),
   ]);
 
-  console.log(appointments, services, clients);
 
   return (
     <AppointmentsClient

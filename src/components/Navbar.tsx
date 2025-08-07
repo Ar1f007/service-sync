@@ -28,7 +28,6 @@ export default function Navbar() {
 
 	// @ts-ignore
 	const isEmployee = session?.user?.role === "staff";
-	console.log({ isEmployee })
 	const navigationLinks = [
 		{ href: "/services", label: "Services", public: true },
 		{ href: "/book", label: "Book Appointment", auth: true },
