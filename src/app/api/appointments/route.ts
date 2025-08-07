@@ -137,7 +137,7 @@ export async function POST(request: Request) {
         employeeId,
         clientId,
         dateTime: start,
-        status: status || "confirmed", // Default to confirmed for client bookings
+        status: "pending",
       },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
