@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import prismaInstance from "@/lib/db";
+import { sendAppointmentConfirmation, sendAdminNotification } from "@/lib/email";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -139,10 +140,26 @@ export async function POST(request: Request) {
       },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
-        client: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true, email: true } },
         employee: { include: { user: { select: { id: true, name: true } } } },
       },
     });
+
+    // Send confirmation email to customer
+    try {
+      await sendAppointmentConfirmation(appointment, appointment.client);
+    } catch (error) {
+      console.error("Failed to send confirmation email:", error);
+      // Don't fail the booking if email fails
+    }
+
+    // Send notification to admin
+    try {
+      await sendAdminNotification(appointment, appointment.client);
+    } catch (error) {
+      console.error("Failed to send admin notification:", error);
+      // Don't fail the booking if email fails
+    }
 
     return NextResponse.json(
       {

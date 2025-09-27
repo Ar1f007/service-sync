@@ -133,3 +133,19 @@ model Appointment {
   @@map("appointment")
 }
 
+model EmailQueue {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  to          String
+  subject     String
+  template    String
+  data        Json
+  status      String   @default("pending") // "pending", "sent", "failed"
+  attempts    Int      @default(0)
+  lastAttempt DateTime?
+  errorMessage String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("emailQueue")
+}
+
