@@ -167,7 +167,7 @@ export async function sendEmail(emailData: EmailData): Promise<boolean> {
     const html = template.render(emailData.data);
     
     const result = await resend.emails.send({
-      from: 'ServiceSync <noreply@ariflab.xyz>', // Use your verified domain
+      from: 'ServiceSync <noreply@emails.ariflab.xyz>', // Use your verified domain
       to: emailData.to,
       subject: emailData.subject,
       html: html,
