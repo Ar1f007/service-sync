@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import prismaInstance from './db';
+import { EMAIL_MAX_RETRY_ATTEMPTS, EMAIL_RETRY_DELAY } from './utils';
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'dummy-key');
 
@@ -243,7 +244,11 @@ export async function processEmailQueue(): Promise<void> {
     const pendingEmails = await prismaInstance.emailQueue.findMany({
       where: {
         status: 'pending',
-        attempts: { lt: 3 }, // Max 3 attempts
+        attempts: { lt: EMAIL_MAX_RETRY_ATTEMPTS }, 
+        OR: [
+          { lastAttempt: null },
+          { lastAttempt: { lte: new Date(Date.now() - EMAIL_RETRY_DELAY) } } 
+        ]
       },
       take: 10, // Process 10 emails at a time
     });
@@ -254,7 +259,7 @@ export async function processEmailQueue(): Promise<void> {
           to: email.to,
           subject: email.subject,
           template: email.template,
-          data: email.data as Record<string, any>,
+          data: email.data as Record<string, unknown>,
         });
 
         if (success) {
