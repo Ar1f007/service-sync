@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import prismaInstance from "@/lib/db";
-import { sendAppointmentConfirmation, sendAdminNotification } from "@/lib/email";
+import { sendBookingSubmitted, sendAppointmentConfirmation, sendAdminNotification } from "@/lib/email";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -145,11 +145,11 @@ export async function POST(request: Request) {
       },
     });
 
-    // Send confirmation email to customer
+    // Send booking submitted email to customer (pending approval)
     try {
-      await sendAppointmentConfirmation(appointment, appointment.client);
+      await sendBookingSubmitted(appointment, appointment.client);
     } catch (error) {
-      console.error("Failed to send confirmation email:", error);
+      console.error("Failed to send booking submitted email:", error);
       // Don't fail the booking if email fails
     }
 

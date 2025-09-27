@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deleteAppointment, updateAppointment } from "@/lib/data/dashboard/appointments";
-import { sendAppointmentCancellation } from "@/lib/email";
+import { sendAppointmentConfirmation, sendAppointmentCancellation } from "@/lib/email";
 import prismaInstance from "@/lib/db";
 
 
@@ -40,8 +40,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const updatedAppointment = await updateAppointment(id, updateData, timezone);
 
-    // Send cancellation email if status changed to cancelled
-    if (updateData.status === "cancelled" && appointment.status !== "cancelled") {
+    // Send appropriate email based on status change
+    if (updateData.status === "confirmed" && appointment.status !== "confirmed") {
+      try {
+        await sendAppointmentConfirmation(appointment, appointment.client);
+      } catch (error) {
+        console.error("Failed to send confirmation email:", error);
+        // Don't fail the update if email fails
+      }
+    } else if (updateData.status === "cancelled" && appointment.status !== "cancelled") {
       try {
         await sendAppointmentCancellation(appointment, appointment.client);
       } catch (error) {

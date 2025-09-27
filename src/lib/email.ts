@@ -18,6 +18,43 @@ export interface EmailTemplate {
 
 // Email templates registry
 const emailTemplates: Record<string, EmailTemplate> = {
+  bookingSubmitted: {
+    name: 'bookingSubmitted',
+    subject: 'Booking Submitted - Awaiting Confirmation - ServiceSync',
+    render: (data) => `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d9488;">Booking Submitted Successfully!</h2>
+        <p>Dear ${data.customer.name},</p>
+        <p>Thank you for booking with ServiceSync! Your appointment has been submitted and is currently awaiting confirmation from our team.</p>
+        
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3>Appointment Details</h3>
+          <p><strong>Service:</strong> ${data.appointment.service.title}</p>
+          <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
+          <p><strong>Duration:</strong> ${data.appointment.service.duration} minutes</p>
+          <p><strong>Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Status:</strong> <span style="color: #f59e0b; font-weight: bold;">Pending Confirmation</span></p>
+        </div>
+        
+        <p>We'll review your booking and send you a confirmation email once it's approved. This usually takes a few minutes during business hours.</p>
+        <p>If you have any questions or need to make changes, please contact us as soon as possible.</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="https://service-sync-lac.vercel.app/dashboard/appointments" 
+             style="background: #0d9488; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">
+            View My Bookings
+          </a>
+        </div>
+        
+        <p style="color: #64748b; font-size: 14px; text-align: center;">
+          Best regards,<br />
+          The ServiceSync Team
+        </p>
+      </div>
+    `,
+  },
   appointmentConfirmation: {
     name: 'appointmentConfirmation',
     subject: 'Appointment Confirmed - ServiceSync',
@@ -254,6 +291,22 @@ export async function sendAppointmentConfirmation(appointment: any, customer: an
     to: customer.email,
     subject: 'Appointment Confirmed - ServiceSync',
     template: 'appointmentConfirmation',
+    data: { appointment, customer },
+  };
+
+  const sent = await sendEmail(emailData);
+  if (!sent) {
+    // If immediate send fails, queue it for retry
+    await queueEmail(emailData);
+  }
+}
+
+export async function sendBookingSubmitted(appointment: any, customer: any): Promise<void> {
+  // Try to send immediately, fallback to queue if fails
+  const emailData = {
+    to: customer.email,
+    subject: 'Booking Submitted - Awaiting Confirmation - ServiceSync',
+    template: 'bookingSubmitted',
     data: { appointment, customer },
   };
 
