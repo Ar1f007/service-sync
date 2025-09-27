@@ -249,12 +249,19 @@ export async function processEmailQueue(): Promise<void> {
 }
 
 export async function sendAppointmentConfirmation(appointment: any, customer: any): Promise<void> {
-  await queueEmail({
+  // Try to send immediately, fallback to queue if fails
+  const emailData = {
     to: customer.email,
     subject: 'Appointment Confirmed - ServiceSync',
     template: 'appointmentConfirmation',
     data: { appointment, customer },
-  });
+  };
+
+  const sent = await sendEmail(emailData);
+  if (!sent) {
+    // If immediate send fails, queue it for retry
+    await queueEmail(emailData);
+  }
 }
 
 export async function sendAppointmentReminder(appointment: any, customer: any): Promise<void> {
@@ -267,12 +274,19 @@ export async function sendAppointmentReminder(appointment: any, customer: any): 
 }
 
 export async function sendAppointmentCancellation(appointment: any, customer: any): Promise<void> {
-  await queueEmail({
+  // Try to send immediately, fallback to queue if fails
+  const emailData = {
     to: customer.email,
     subject: 'Appointment Cancelled - ServiceSync',
     template: 'appointmentCancellation',
     data: { appointment, customer },
-  });
+  };
+
+  const sent = await sendEmail(emailData);
+  if (!sent) {
+    // If immediate send fails, queue it for retry
+    await queueEmail(emailData);
+  }
 }
 
 export async function sendWaitlistNotification(appointment: any, customer: any): Promise<void> {
@@ -292,11 +306,18 @@ export async function sendAdminNotification(appointment: any, customer: any): Pr
   });
 
   for (const admin of admins) {
-    await queueEmail({
+    // Try to send immediately, fallback to queue if fails
+    const emailData = {
       to: admin.email,
       subject: 'New Booking - ServiceSync Admin',
       template: 'adminNotification',
       data: { appointment, customer },
-    });
+    };
+
+    const sent = await sendEmail(emailData);
+    if (!sent) {
+      // If immediate send fails, queue it for retry
+      await queueEmail(emailData);
+    }
   }
 }

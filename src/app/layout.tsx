@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import EmailProcessor from "@/components/EmailProcessor";
 import { Calendar } from "lucide-react";
 import Link from "next/link";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <EmailProcessor />
         <Navbar />
         {children}
         {/* Footer */}
