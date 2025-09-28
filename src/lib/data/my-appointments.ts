@@ -8,6 +8,8 @@ interface Appointment {
 	employee: { id: string; user: { id: string; name: string } };
 	dateTime: string;
 	status: string;
+	totalPrice?: number;
+	addons?: { id: string; name: string; price: number; duration: number }[];
 }
 
 /**
@@ -32,23 +34,44 @@ export async function getClientAppointments(
 				},
 				client: { select: { id: true, name: true } },
 				employee: { include: { user: { select: { id: true, name: true } } } },
+				appointmentAddons: {
+					include: {
+						addon: { select: { id: true, name: true, price: true, duration: true } }
+					}
+				},
 			},
 		});
 
-		return appointments.map((appt) => ({
-			id: appt.id,
-			service: appt.service,
-			client: appt.client,
-			employee: {
-                ...appt.employee,
-                user: {
-                    ...appt.employee.user,
-                    name: appt.employee.user.name || ""
-                }
-            },
-			dateTime: toZonedTime(appt.dateTime, timezone).toISOString(),
-			status: appt.status,
-		}));
+		return appointments.map((appt) => {
+			// Calculate total price including add-ons
+			const addonPrice = appt.appointmentAddons.reduce((sum, aa) => sum + aa.addon.price, 0);
+			const totalPrice = appt.service.price + addonPrice;
+
+			// Map add-ons
+			const addons = appt.appointmentAddons.map(aa => ({
+				id: aa.addon.id,
+				name: aa.addon.name,
+				price: aa.addon.price,
+				duration: aa.addon.duration,
+			}));
+
+			return {
+				id: appt.id,
+				service: appt.service,
+				client: appt.client,
+				employee: {
+					...appt.employee,
+					user: {
+						...appt.employee.user,
+						name: appt.employee.user.name || ""
+					}
+				},
+				dateTime: toZonedTime(appt.dateTime, timezone).toISOString(),
+				status: appt.status,
+				totalPrice,
+				addons: addons.length > 0 ? addons : undefined,
+			};
+		});
 	} catch (error) {
 		console.error("Failed to fetch client appointments:", error);
 		// In a real application, you might want to throw a more specific error

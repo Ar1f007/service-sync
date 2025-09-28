@@ -40,8 +40,10 @@ export default function Navbar() {
 			employee: true,
 		},
 		{ href: "/admin/services", label: "Manage Services", admin: true },
+		{ href: "/admin/addons", label: "Service Add-ons", admin: true },
 		{ href: "/admin/employees", label: "Manage Staff", admin: true },
 		{ href: "/admin/all-appointments", label: "All Appointments", admin: true },
+		{ href: "/admin/risk-assessment", label: "Risk Assessment", admin: true },
 		{ href: "/admin/emails", label: "Email Management", admin: true },
 	];
 

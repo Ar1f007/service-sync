@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import prismaInstance from "@/lib/db";
-import { sendBookingSubmitted, sendAppointmentConfirmation, sendAdminNotification } from "@/lib/email";
+import { sendBookingSubmitted,  sendAdminNotification } from "@/lib/email";
+import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
+  
   if (!session || (session.user.role !== "admin" && session.user.role !== "staff" && session.user.role !== "client")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
@@ -44,22 +46,34 @@ export async function GET(request: Request) {
     }
 
     const appointments = await prismaInstance.appointment.findMany({
-      where,
+      where: {
+        ...where,
+      },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
         client: { select: { id: true, name: true } },
         employee: { include: { user: { select: { id: true, name: true } } } },
+        appointmentAddons: {
+          include: {
+            addon: { select: { id: true, name: true, price: true, duration: true } },
+          },
+        },
       },
     });
 
+    // Filter out appointments with null clientId (MongoDB Prisma limitation)
+    const validAppointments = appointments.filter(appt => appt.clientId !== null);
+
     return NextResponse.json({
-      appointments: appointments.map((appt) => ({
+      appointments: validAppointments.map((appt) => ({
         id: appt.id,
         service: appt.service,
         client: appt.client,
         employee: appt.employee,
         dateTime: toZonedTime(appt.dateTime, timezone).toISOString(),
         status: appt.status,
+        totalPrice: appt.totalPrice,
+        addons: appt.appointmentAddons.map(aa => aa.addon),
       })),
     });
   } catch (error) {
@@ -77,7 +91,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { serviceId, employeeId, clientId, dateTime, status = "pending", timezone = "Europe/London" } = await request.json();
+    const { 
+      serviceId, 
+      employeeId, 
+      clientId, 
+      dateTime, 
+      status = "pending", 
+      timezone = "Europe/London",
+      addonIds = []
+    } = await request.json();
 
     if (!serviceId || !employeeId || !clientId || !dateTime || !status) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -89,7 +111,7 @@ export async function POST(request: Request) {
     }
 
     // Validate relations
-    const [service, client, employee, serviceEmployee] = await Promise.all([
+    const [service, client, employee, serviceEmployee, addons] = await Promise.all([
       prismaInstance.service.findUnique({
         where: { id: serviceId },
         select: { id: true, title: true, price: true, duration: true },
@@ -105,6 +127,13 @@ export async function POST(request: Request) {
       prismaInstance.serviceEmployee.findFirst({
         where: { serviceId, employeeId },
       }),
+      addonIds.length > 0 ? prismaInstance.serviceAddon.findMany({
+        where: {
+          id: { in: addonIds },
+          serviceId,
+          isActive: true,
+        },
+      }) : Promise.resolve([]),
     ]);
 
     if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -114,9 +143,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Employee not assigned to this service" }, { status: 400 });
     }
 
+    // Validate add-ons
+    if (addonIds.length > 0 && addons.length !== addonIds.length) {
+      return NextResponse.json({ error: "One or more add-ons are invalid or inactive" }, { status: 400 });
+    }
+
+    // Calculate total price and duration
+    const addonPrice = addons.reduce((sum, addon) => sum + addon.price, 0);
+    const addonDuration = addons.reduce((sum, addon) => sum + addon.duration, 0);
+    const totalPrice = service.price + addonPrice;
+    const totalDuration = service.duration + addonDuration;
+
     // Conflict check
     const start = fromZonedTime(new Date(dateTime), timezone);
-    const end = new Date(start.getTime() + service.duration * 60 * 1000);
+    const end = new Date(start.getTime() + totalDuration * 60 * 1000);
     const conflicting = await prismaInstance.appointment.findFirst({
       where: {
         employeeId,
@@ -130,24 +170,52 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Time slot unavailable" }, { status: 409 });
     }
 
-    const appointment = await prismaInstance.appointment.create({
-      data: {
-        serviceId,
-        employeeId,
-        clientId,
-        dateTime: start,
-        status: status || "pending",
-      },
-      include: {
-        service: { select: { id: true, title: true, price: true, duration: true } },
-        client: { select: { id: true, name: true, email: true } },
-        employee: { include: { user: { select: { id: true, name: true } } } },
-      },
+    // Create appointment with add-ons in a transaction
+    const appointment = await prismaInstance.$transaction(async (tx) => {
+      const newAppointment = await tx.appointment.create({
+        data: {
+          serviceId,
+          employeeId,
+          clientId,
+          dateTime: start,
+          status: status || "pending",
+          totalPrice,
+        },
+        include: {
+          service: { select: { id: true, title: true, price: true, duration: true } },
+          client: { select: { id: true, name: true, email: true } },
+          employee: { include: { user: { select: { id: true, name: true } } } },
+        },
+      });
+
+      // Create appointment add-ons if any
+      if (addons.length > 0) {
+        await tx.appointmentAddon.createMany({
+          data: addons.map(addon => ({
+            appointmentId: newAppointment.id,
+            addonId: addon.id,
+          })),
+        });
+      }
+
+      return newAppointment;
     });
+
+    // Add add-ons information to the appointment object for email sending
+    const appointmentWithAddons = {
+      ...appointment,
+      addons: addons.map(addon => ({
+        id: addon.id,
+        name: addon.name,
+        price: addon.price,
+        duration: addon.duration,
+      })),
+      totalPrice,
+    };
 
     // Send booking submitted email to customer (pending approval)
     try {
-      await sendBookingSubmitted(appointment, appointment.client);
+      await sendBookingSubmitted(appointmentWithAddons, appointment.client);
     } catch (error) {
       console.error("Failed to send booking submitted email:", error);
       // Don't fail the booking if email fails
@@ -155,10 +223,18 @@ export async function POST(request: Request) {
 
     // Send notification to admin
     try {
-      await sendAdminNotification(appointment, appointment.client);
+      await sendAdminNotification(appointmentWithAddons, appointment.client);
     } catch (error) {
       console.error("Failed to send admin notification:", error);
       // Don't fail the booking if email fails
+    }
+
+    // Update customer risk assessment
+    try {
+      await updateCustomerRiskOnAppointmentChange(appointment.id);
+    } catch (error) {
+      console.error("Failed to update customer risk assessment:", error);
+      // Don't fail the booking if risk assessment update fails
     }
 
     return NextResponse.json(
@@ -169,6 +245,13 @@ export async function POST(request: Request) {
         employee: appointment.employee,
         dateTime: toZonedTime(appointment.dateTime, timezone).toISOString(),
         status: appointment.status,
+        totalPrice: appointment.totalPrice,
+        addons: addons.map(addon => ({
+          id: addon.id,
+          name: addon.name,
+          price: addon.price,
+          duration: addon.duration,
+        })),
       },
       { status: 201 }
     );

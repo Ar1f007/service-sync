@@ -26,9 +26,16 @@ interface BookingSubmittedEmailProps {
     };
     dateTime: string;
     status: string;
+    totalPrice?: number;
+    addons?: Array<{
+      id: string;
+      name: string;
+      price: number;
+      duration: number;
+    }>;
   };
   customer: {
-    name: string;
+    name: string | null;
     email: string;
   };
 }
@@ -62,7 +69,7 @@ export const BookingSubmitted = ({
           <Heading style={h1}>Booking Submitted Successfully!</Heading>
           
           <Text style={text}>
-            Hi {customer.name},
+            Hi {customer.name || 'Valued Customer'},
           </Text>
           
           <Text style={text}>
@@ -78,9 +85,6 @@ export const BookingSubmitted = ({
               <strong>Duration:</strong> {appointment.service.duration} minutes
             </Text>
             <Text style={text}>
-              <strong>Price:</strong> £{appointment.service.price}
-            </Text>
-            <Text style={text}>
               <strong>Date:</strong> {appointmentDate}
             </Text>
             <Text style={text}>
@@ -89,6 +93,34 @@ export const BookingSubmitted = ({
             <Text style={text}>
               <strong>Staff:</strong> {appointment.employee.user.name}
             </Text>
+            
+            {/* Add-ons Section */}
+            {appointment.addons && appointment.addons.length > 0 && (
+              <>
+                <Text style={text}>
+                  <strong>Add-ons:</strong>
+                </Text>
+                {appointment.addons.map((addon) => (
+                  <Text key={addon.id} style={{ ...text, marginLeft: '20px', color: '#64748b' }}>
+                    • {addon.name} (+£{addon.price.toFixed(2)}{addon.duration > 0 ? `, +${addon.duration}min` : ''})
+                  </Text>
+                ))}
+              </>
+            )}
+            
+            {/* Pricing Section */}
+            <Text style={text}>
+              <strong>Base Service Price:</strong> £{appointment.service.price.toFixed(2)}
+            </Text>
+            {appointment.addons && appointment.addons.length > 0 && (
+              <Text style={text}>
+                <strong>Add-ons Total:</strong> £{appointment.addons.reduce((sum, addon) => sum + addon.price, 0).toFixed(2)}
+              </Text>
+            )}
+            <Text style={{ ...text, fontWeight: 'bold', fontSize: '18px', color: '#0d9488' }}>
+              <strong>Total Price:</strong> £{appointment.totalPrice ? appointment.totalPrice.toFixed(2) : appointment.service.price.toFixed(2)}
+            </Text>
+            
             <Text style={text}>
               <strong>Status:</strong> Pending Confirmation
             </Text>

@@ -1,17 +1,12 @@
 import { getSession } from "@/lib/session";
 import AllAppointmentsClient from "./_components/AllAppointmentsClient";
 import { getAppointments } from "@/lib/data/admin";
-
+import { redirect } from "next/navigation";
 
 export default async function AllAppointmentsPage() {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
-    return {
-      redirect: {
-        destination: "/sign-in",
-        permanent: false,
-      },
-    };
+    redirect("/sign-in");
   }
 
   const appointments = await getAppointments("", "admin");

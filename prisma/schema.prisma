@@ -29,6 +29,7 @@ model User {
 
   services     Service[]  @relation("ServiceCreator")
   employeeInfo Employee[] @relation("EmployeeUser")
+  customerRisk CustomerRisk? @relation("CustomerRisk")
   @@map("user")
 }
 
@@ -40,7 +41,7 @@ model Session {
   updatedAt DateTime
   ipAddress String?
   userAgent String?
-  userId    String
+  userId    String   @db.ObjectId
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([token])
@@ -51,7 +52,7 @@ model Account {
   id                    String    @id @map("_id")
   accountId             String
   providerId            String
-  userId                String
+  userId                String   @db.ObjectId
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
@@ -88,6 +89,7 @@ model Service {
   creator     User            @relation("ServiceCreator", fields: [createdBy], references: [id])
   serviceEmployees ServiceEmployee[] // Explicit join collection
   appointments Appointment[]   @relation("ServiceAppointments")
+  addons      ServiceAddon[]  @relation("ServiceAddons")
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -126,9 +128,14 @@ model Appointment {
   employeeId String   @db.ObjectId
   employee   Employee @relation("EmployeeAppointments", fields: [employeeId], references: [id])
   dateTime   DateTime
-  status     String   @default("pending") // e.g., "pending", "confirmed", "canceled"
+  status     String   @default("pending") // e.g., "pending", "confirmed", "canceled", "no_show"
+  totalPrice Float?   // Total price including add-ons
+  cancelledBy String? @db.ObjectId // Who cancelled the appointment (clientId or adminId)
+  cancelledByRole String? // "client", "admin", "staff", "system"
+  cancellationReason String? // Reason for cancellation
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  appointmentAddons AppointmentAddon[] @relation("AppointmentAddons")
 
   @@map("appointment")
 }
@@ -147,5 +154,73 @@ model EmailQueue {
   updatedAt   DateTime @updatedAt
 
   @@map("emailQueue")
+}
+
+model ServiceAddon {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  price       Float
+  duration    Int      @default(0) // Additional duration in minutes
+  serviceId   String   @db.ObjectId
+  service     Service  @relation("ServiceAddons", fields: [serviceId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  appointmentAddons AppointmentAddon[] @relation("ServiceAddonAppointments")
+
+  @@map("serviceAddon")
+}
+
+model AppointmentAddon {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  appointmentId String      @db.ObjectId
+  appointment  Appointment  @relation("AppointmentAddons", fields: [appointmentId], references: [id], onDelete: Cascade)
+  addonId      String       @db.ObjectId
+  addon        ServiceAddon @relation("ServiceAddonAppointments", fields: [addonId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+
+  @@unique([appointmentId, addonId])
+  @@map("appointmentAddon")
+}
+
+model CustomerRisk {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String   @db.ObjectId
+  user                  User     @relation("CustomerRisk", fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Risk Metrics
+  totalBookings         Int      @default(0)
+  completedBookings     Int      @default(0)
+  cancelledBookings     Int      @default(0)
+  noShowBookings        Int      @default(0)
+  lastMinuteCancellations Int    @default(0) // Cancellations within 24 hours
+  
+  // Calculated Scores
+  cancellationRate      Float    @default(0) // Percentage of cancelled bookings
+  noShowRate            Float    @default(0) // Percentage of no-shows
+  lastMinuteCancelRate  Float    @default(0) // Percentage of last-minute cancellations
+  riskScore             Float    @default(0) // Overall risk score (0-100)
+  riskLevel             String   @default("low") // "low", "medium", "high", "very_high"
+  
+  // Behavioral Patterns
+  averageBookingFrequency Float? // Days between bookings
+  lastBookingDate        DateTime?
+  lastCancellationDate   DateTime?
+  consecutiveCancellations Int   @default(0)
+  
+  // Risk Mitigation
+  requiresApproval      Boolean  @default(false)
+  depositRequired       Boolean  @default(false)
+  maxAdvanceBookingDays Int?     // Limit how far in advance they can book
+  adminNotes            String?  // Admin notes about customer behavior
+  
+  // Timestamps
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  lastCalculatedAt      DateTime @default(now())
+
+  @@unique([userId])
+  @@map("customerRisk")
 }
 

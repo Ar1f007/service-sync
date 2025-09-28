@@ -4,17 +4,56 @@ import { EMAIL_MAX_RETRY_ATTEMPTS, EMAIL_RETRY_DELAY } from './utils';
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'dummy-key');
 
+interface Addon {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;
+}
+
+interface Service {
+  id: string;
+  title: string;
+  price: number;
+  duration: number;
+}
+
+interface Employee {
+  user: {
+    id: string;
+    name: string | null;
+  };
+}
+
+interface Customer {
+  name: string | null;
+  email: string;
+}
+
+interface Appointment {
+  id: string;
+  service: Service;
+  employee: Employee;
+  dateTime: string | Date;
+  status: string;
+  totalPrice?: number | null;
+  addons?: Addon[];
+}
+
 export interface EmailData {
   to: string;
   subject: string;
   template: string;
-  data: Record<string, any>;
+  data: {
+    appointment: Appointment;
+    customer: Customer;
+  };
 }
 
 export interface EmailTemplate {
   name: string;
   subject: string;
-  render: (data: any) => string;
+  render: (data: { appointment: Appointment; customer: Customer }) => string;
 }
 
 // Email templates registry
@@ -25,7 +64,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
     render: (data) => `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #0d9488;">Booking Submitted Successfully!</h2>
-        <p>Dear ${data.customer.name},</p>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
         <p>Thank you for booking with ServiceSync! Your appointment has been submitted and is currently awaiting confirmation from our team.</p>
         
         <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -34,8 +73,21 @@ const emailTemplates: Record<string, EmailTemplate> = {
           <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
           <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
           <p><strong>Duration:</strong> ${data.appointment.service.duration} minutes</p>
-          <p><strong>Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
-          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
+          
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons:</strong></p>
+            ${data.appointment.addons.map((addon: Addon) => `
+              <p style="margin-left: 20px; color: #64748b;">• ${addon.name} (+£${addon.price.toFixed(2)}${addon.duration > 0 ? `, +${addon.duration}min` : ''})</p>
+            `).join('')}
+          ` : ''}
+          
+          <p><strong>Base Service Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons Total:</strong> £${data.appointment.addons.reduce((sum: number, addon: Addon) => sum + addon.price, 0).toFixed(2)}</p>
+          ` : ''}
+          <p style="font-weight: bold; font-size: 18px; color: #0d9488;"><strong>Total Price:</strong> £${data.appointment.totalPrice ? data.appointment.totalPrice.toFixed(2) : data.appointment.service.price.toFixed(2)}</p>
+          
           <p><strong>Status:</strong> <span style="color: #f59e0b; font-weight: bold;">Pending Confirmation</span></p>
         </div>
         
@@ -62,7 +114,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
     render: (data) => `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #0d9488;">Appointment Confirmed</h2>
-        <p>Dear ${data.customer.name},</p>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
         <p>Your appointment has been successfully confirmed!</p>
         
         <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -71,8 +123,20 @@ const emailTemplates: Record<string, EmailTemplate> = {
           <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
           <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
           <p><strong>Duration:</strong> ${data.appointment.service.duration} minutes</p>
-          <p><strong>Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
-          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
+          
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons:</strong></p>
+            ${data.appointment.addons.map((addon: Addon) => `
+              <p style="margin-left: 20px; color: #64748b;">• ${addon.name} (+£${addon.price.toFixed(2)}${addon.duration > 0 ? `, +${addon.duration}min` : ''})</p>
+            `).join('')}
+          ` : ''}
+          
+          <p><strong>Base Service Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons Total:</strong> £${data.appointment.addons.reduce((sum: number, addon: Addon) => sum + addon.price, 0).toFixed(2)}</p>
+          ` : ''}
+          <p style="font-weight: bold; font-size: 18px; color: #0d9488;"><strong>Total Price:</strong> £${data.appointment.totalPrice ? data.appointment.totalPrice.toFixed(2) : data.appointment.service.price.toFixed(2)}</p>
         </div>
         
         <p>We look forward to seeing you!</p>
@@ -87,7 +151,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
     render: (data) => `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #0d9488;">Appointment Reminder</h2>
-        <p>Dear ${data.customer.name},</p>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
         <p>This is a friendly reminder about your upcoming appointment.</p>
         
         <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
@@ -96,7 +160,14 @@ const emailTemplates: Record<string, EmailTemplate> = {
           <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
           <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
           <p><strong>Duration:</strong> ${data.appointment.service.duration} minutes</p>
-          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
+          
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons:</strong></p>
+            ${data.appointment.addons.map((addon: Addon) => `
+              <p style="margin-left: 20px; color: #64748b;">• ${addon.name} (+£${addon.price.toFixed(2)}${addon.duration > 0 ? `, +${addon.duration}min` : ''})</p>
+            `).join('')}
+          ` : ''}
         </div>
         
         <p>Please arrive 10 minutes early for your appointment.</p>
@@ -112,7 +183,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
     render: (data) => `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #dc2626;">Appointment Cancelled</h2>
-        <p>Dear ${data.customer.name},</p>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
         <p>Your appointment has been cancelled.</p>
         
         <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
@@ -120,7 +191,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
           <p><strong>Service:</strong> ${data.appointment.service.title}</p>
           <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
           <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
-          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
         </div>
         
         <p>If you would like to book a new appointment, please visit our booking page.</p>
@@ -135,7 +206,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
     render: (data) => `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #059669;">Slot Available!</h2>
-        <p>Dear ${data.customer.name},</p>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
         <p>Great news! A slot has become available for your requested service.</p>
         
         <div style="background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #059669;">
@@ -145,7 +216,7 @@ const emailTemplates: Record<string, EmailTemplate> = {
           <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
           <p><strong>Duration:</strong> ${data.appointment.service.duration} minutes</p>
           <p><strong>Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
-          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
         </div>
         
         <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -173,13 +244,25 @@ const emailTemplates: Record<string, EmailTemplate> = {
         
         <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3>Booking Details</h3>
-          <p><strong>Customer:</strong> ${data.customer.name} (${data.customer.email})</p>
+          <p><strong>Customer:</strong> ${data.customer.name || 'Unknown'} (${data.customer.email})</p>
           <p><strong>Service:</strong> ${data.appointment.service.title}</p>
           <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
           <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
           <p><strong>Duration:</strong> ${data.appointment.service.duration} minutes</p>
-          <p><strong>Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
-          <p><strong>Staff:</strong> ${data.appointment.employee.user.name}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
+          
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons:</strong></p>
+            ${data.appointment.addons.map((addon: Addon) => `
+              <p style="margin-left: 20px; color: #64748b;">• ${addon.name} (+£${addon.price.toFixed(2)}${addon.duration > 0 ? `, +${addon.duration}min` : ''})</p>
+            `).join('')}
+          ` : ''}
+          
+          <p><strong>Base Service Price:</strong> £${data.appointment.service.price.toFixed(2)}</p>
+          ${data.appointment.addons && data.appointment.addons.length > 0 ? `
+            <p><strong>Add-ons Total:</strong> £${data.appointment.addons.reduce((sum: number, addon: Addon) => sum + addon.price, 0).toFixed(2)}</p>
+          ` : ''}
+          <p style="font-weight: bold; font-size: 18px; color: #0d9488;"><strong>Total Price:</strong> £${data.appointment.totalPrice ? data.appointment.totalPrice.toFixed(2) : data.appointment.service.price.toFixed(2)}</p>
         </div>
         
         <p>Please check your admin dashboard for more details.</p>
@@ -229,7 +312,7 @@ export async function queueEmail(emailData: EmailData): Promise<void> {
         to: emailData.to,
         subject: emailData.subject,
         template: emailData.template,
-        data: emailData.data,
+        data: JSON.parse(JSON.stringify(emailData.data)),
         status: 'pending',
       },
     });
@@ -259,7 +342,7 @@ export async function processEmailQueue(): Promise<void> {
           to: email.to,
           subject: email.subject,
           template: email.template,
-          data: email.data as Record<string, unknown>,
+          data: email.data as unknown as { appointment: Appointment; customer: Customer },
         });
 
         if (success) {
@@ -290,7 +373,7 @@ export async function processEmailQueue(): Promise<void> {
   }
 }
 
-export async function sendAppointmentConfirmation(appointment: any, customer: any): Promise<void> {
+export async function sendAppointmentConfirmation(appointment: Appointment, customer: Customer): Promise<void> {
   // Try to send immediately, fallback to queue if fails
   const emailData = {
     to: customer.email,
@@ -306,7 +389,7 @@ export async function sendAppointmentConfirmation(appointment: any, customer: an
   }
 }
 
-export async function sendBookingSubmitted(appointment: any, customer: any): Promise<void> {
+export async function sendBookingSubmitted(appointment: Appointment, customer: Customer): Promise<void> {
   // Try to send immediately, fallback to queue if fails
   const emailData = {
     to: customer.email,
@@ -322,7 +405,7 @@ export async function sendBookingSubmitted(appointment: any, customer: any): Pro
   }
 }
 
-export async function sendAppointmentReminder(appointment: any, customer: any): Promise<void> {
+export async function sendAppointmentReminder(appointment: Appointment, customer: Customer): Promise<void> {
   await queueEmail({
     to: customer.email,
     subject: 'Appointment Reminder - ServiceSync',
@@ -331,7 +414,7 @@ export async function sendAppointmentReminder(appointment: any, customer: any): 
   });
 }
 
-export async function sendAppointmentCancellation(appointment: any, customer: any): Promise<void> {
+export async function sendAppointmentCancellation(appointment: Appointment, customer: Customer): Promise<void> {
   // Try to send immediately, fallback to queue if fails
   const emailData = {
     to: customer.email,
@@ -347,7 +430,7 @@ export async function sendAppointmentCancellation(appointment: any, customer: an
   }
 }
 
-export async function sendWaitlistNotification(appointment: any, customer: any): Promise<void> {
+export async function sendWaitlistNotification(appointment: Appointment, customer: Customer): Promise<void> {
   await queueEmail({
     to: customer.email,
     subject: 'Slot Available - ServiceSync',
@@ -356,7 +439,7 @@ export async function sendWaitlistNotification(appointment: any, customer: any):
   });
 }
 
-export async function sendAdminNotification(appointment: any, customer: any): Promise<void> {
+export async function sendAdminNotification(appointment: Appointment, customer: Customer): Promise<void> {
   // Get admin emails
   const admins = await prismaInstance.user.findMany({
     where: { role: 'admin' },

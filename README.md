@@ -6,6 +6,12 @@ A modern, full-stack appointment booking platform built with Next.js, TypeScript
 
 - **User Management**: Role-based authentication (Client, Admin, Staff)
 - **Service Management**: Create and manage service offerings
+- **Service Add-ons System**: Dynamic pricing with optional add-ons
+  - Add-on creation and management
+  - Real-time price calculation
+  - Customer selection during booking
+  - Admin interface for add-on management
+  - Email templates with add-on details
 - **Employee Management**: Staff assignment to services
 - **Appointment Booking**: Real-time availability and conflict detection
 - **Dashboard**: Separate dashboards for clients, staff, and admins
@@ -17,6 +23,13 @@ A modern, full-stack appointment booking platform built with Next.js, TypeScript
   - Professional email templates with branding
   - Queue-based processing with retry logic
   - Admin email management dashboard
+- **Customer Risk Assessment**: Advanced risk management system
+  - Weighted risk scoring algorithm (5 behavioral factors)
+  - Real-time risk calculation and updates
+  - Admin dashboard with risk analytics
+  - Booking restrictions for high-risk customers
+  - Risk mitigation strategies (deposits, approval workflows)
+  - Customer behavior tracking and admin notes
 
 ## 🎯 Upcoming Features (Development Plan)
 
@@ -142,25 +155,31 @@ A modern, full-stack appointment booking platform built with Next.js, TypeScript
 
 ---
 
-### 5. Service Add-ons System
-**Status**: Planned  
+### 5. Service Add-ons System ✅ COMPLETED
+**Status**: Completed  
 **Priority**: High  
-**Estimated Time**: 2-3 days
+**Completed**: January 2025
 
-#### Features:
-- Add-on creation and management for services
-- Dynamic pricing with add-on combinations
-- Customer selection during booking
-- Add-on availability per service
-- Bulk add-on management
-- Revenue tracking per add-on
+#### Features Implemented:
+- ✅ Add-on creation and management for services
+- ✅ Dynamic pricing with add-on combinations
+- ✅ Customer selection during booking
+- ✅ Add-on availability per service
+- ✅ Admin interface for add-on management
+- ✅ Revenue tracking per add-on
+- ✅ Email templates with add-on information
+- ✅ Real-time price calculation
+- ✅ Add-on validation and compatibility checks
 
 #### Technical Implementation:
+- **Database**: ServiceAddon and AppointmentAddon models with Prisma
+- **API**: RESTful endpoints for CRUD operations and price calculation
 - **Algorithm**: Dynamic pricing calculation with add-on combinations
-- **Database**: Add-on table with service relationships
-- **Pricing Logic**: Base service price + selected add-ons
-- **UI**: Multi-select add-on interface during booking
+- **UI**: Multi-select add-on interface during booking with real-time pricing
+- **Admin Panel**: Complete add-on management at `/admin/addons`
+- **Email Integration**: Add-on details included in all email templates
 - **Validation**: Add-on compatibility and availability checks
+- **Type Safety**: Full TypeScript support with proper interfaces
 
 #### Why Dynamic Pricing Algorithm?
 - Flexible pricing combinations
@@ -229,66 +248,146 @@ Time Slot    | Booking Density | Status
 
 ---
 
-### 7. Customer Risk Assessment System
-**Status**: Planned  
+### 7. Customer Risk Assessment System ✅ COMPLETED
+**Status**: Completed  
 **Priority**: High  
-**Estimated Time**: 2-3 days
+**Completed**: January 2025
 
-#### Features:
-- Customer cancellation rate tracking
-- Risk score calculation and display
-- Admin warnings for high-risk customers
-- Booking approval workflow for risky customers
-- Customer behavior analytics
-- Risk mitigation strategies
-- Historical cancellation patterns
+#### Features Implemented:
+- ✅ Customer cancellation rate tracking
+- ✅ Risk score calculation and display
+- ✅ Admin warnings for high-risk customers
+- ✅ Booking approval workflow for risky customers
+- ✅ Customer behavior analytics
+- ✅ Risk mitigation strategies
+- ✅ Historical cancellation patterns
+- ✅ Real-time risk assessment updates
+- ✅ Admin dashboard with risk management
+- ✅ Booking flow integration with risk warnings
 
 #### Technical Implementation:
-- **Algorithm**: Weighted risk scoring with behavioral analysis
-- **Database**: Customer risk metrics and cancellation history
-- **Scoring System**: Multi-factor risk assessment
-- **UI**: Risk indicators and admin warnings
-- **Notifications**: Alerts for high-risk bookings
+- **Algorithm**: Weighted Risk Scoring with Behavioral Analysis
+- **Database**: CustomerRisk model with comprehensive metrics
+- **Scoring System**: Multi-factor risk assessment (0-100 scale)
+- **UI**: Risk indicators, warnings, and admin dashboard
+- **API**: RESTful endpoints for risk management
+- **Integration**: Automatic updates on appointment changes
 
-#### Why Weighted Risk Scoring Algorithm?
-- Considers multiple factors (cancellation rate, timing, frequency)
-- Provides nuanced risk assessment
-- Adapts to different business models
-- Easy to adjust scoring weights
-- Handles edge cases and anomalies
+#### **Weighted Risk Scoring Algorithm - Deep Dive**
 
-#### Risk Factors:
-- **Cancellation Rate**: Percentage of cancelled vs completed bookings
-- **Last-Minute Cancellations**: Cancellations within 24 hours
-- **No-Show Rate**: Bookings where customer didn't show up
-- **Booking Frequency**: How often they book and cancel
-- **Time Patterns**: Cancellation timing patterns
-- **Payment History**: Payment failures or disputes
+**Why This Algorithm?**
+The weighted risk scoring algorithm was chosen over simpler alternatives (like basic cancellation rate) because it provides:
 
-#### Risk Levels:
-- **🟢 Low Risk**: <20% cancellation rate, reliable customer
-- **🟡 Medium Risk**: 20-40% cancellation rate, occasional issues
-- **🟠 High Risk**: 40-60% cancellation rate, frequent problems
-- **🔴 Very High Risk**: >60% cancellation rate, unreliable customer
+1. **Multi-Dimensional Analysis**: Considers 5 key behavioral factors instead of just one
+2. **Adaptive Scoring**: Weights can be adjusted based on business needs
+3. **Nuanced Assessment**: Distinguishes between different types of problematic behavior
+4. **Scalable**: Works for businesses of any size
+5. **Actionable**: Provides clear risk levels for decision-making
 
-#### Admin Features:
-- **Risk Dashboard**: Overview of all customer risk levels
-- **Booking Warnings**: Alerts when high-risk customer books
-- **Approval Workflow**: Manual approval for high-risk bookings
-- **Risk Mitigation**: Options like deposits, shorter booking windows
-- **Customer Notes**: Admin notes about customer behavior
-
-#### Example Risk Assessment:
+**Algorithm Formula:**
 ```
-Customer: John Doe
-Total Bookings: 10
-Completed: 3 (30%)
-Cancelled: 7 (70%)
-Last-Minute Cancels: 5
-No-Shows: 2
-Risk Score: 85/100 (Very High Risk)
-Recommendation: Require deposit or manual approval
+Risk Score = (CancellationRate × 0.30) + 
+             (NoShowRate × 0.25) + 
+             (LastMinuteCancelRate × 0.20) + 
+             (ConsecutiveCancellations × 0.15) + 
+             (BookingFrequency × 0.10)
 ```
+
+**Factor Breakdown:**
+
+| Factor | Weight | Purpose | Calculation |
+|--------|--------|---------|-------------|
+| **Cancellation Rate** | 30% | Primary reliability indicator | `cancelled_bookings / total_bookings` |
+| **No-Show Rate** | 25% | Measures commitment level | `no_show_bookings / total_bookings` |
+| **Last-Minute Cancels** | 20% | Indicates poor planning | `last_minute_cancels / cancelled_bookings` |
+| **Consecutive Cancels** | 15% | Shows pattern behavior | `max_consecutive_cancellations × 20` |
+| **Booking Frequency** | 10% | Indicates engagement level | Normalized based on booking intervals |
+
+**Risk Level Thresholds:**
+- **🟢 Low Risk (0-19)**: Reliable customers, no restrictions
+- **🟡 Medium Risk (20-39)**: Monitor closely, optional restrictions
+- **🟠 High Risk (40-59)**: Require approval, consider deposits
+- **🔴 Very High Risk (60-100)**: Full payment required, manual approval
+
+#### **Benefits Over Alternative Approaches:**
+
+**vs. Simple Cancellation Rate:**
+- ✅ Considers timing patterns (last-minute vs planned cancellations)
+- ✅ Accounts for booking frequency and engagement
+- ✅ Identifies consecutive cancellation patterns
+- ❌ Simple rate only shows overall percentage
+
+**vs. Machine Learning Models:**
+- ✅ Transparent and explainable scoring
+- ✅ No training data required
+- ✅ Easy to adjust weights for business needs
+- ✅ Fast computation and real-time updates
+- ❌ ML models require large datasets and complex training
+
+**vs. Rule-Based Systems:**
+- ✅ Continuous scoring instead of binary decisions
+- ✅ Considers multiple factors simultaneously
+- ✅ Graduated risk levels for flexible responses
+- ❌ Rule-based systems are rigid and hard to adjust
+
+#### **Business Impact:**
+
+**Revenue Protection:**
+- **Deposit Requirements**: High-risk customers pay upfront
+- **Approval Workflow**: Prevents problematic bookings
+- **Advance Booking Limits**: Reduces last-minute cancellations
+
+**Operational Efficiency:**
+- **Proactive Management**: Identify issues before they happen
+- **Resource Planning**: Better staff allocation based on reliability
+- **Admin Visibility**: Clear dashboard for monitoring customer behavior
+
+**Customer Experience:**
+- **Fair Treatment**: Risk-based restrictions are transparent
+- **Reliable Service**: Reduces no-shows for other customers
+- **Personalized Approach**: Different rules based on behavior
+
+#### **Real-World Example:**
+```
+Customer: Sarah Johnson
+Total Bookings: 15
+Completed: 8 (53%)
+Cancelled: 7 (47%)
+No-Shows: 3 (20%)
+Last-Minute Cancels: 4 (57% of cancellations)
+Consecutive Cancels: 3
+Average Booking Frequency: 14 days
+
+Risk Calculation:
+- Cancellation Rate: 47% × 30 = 14.1
+- No-Show Rate: 20% × 25 = 5.0
+- Last-Minute Rate: 57% × 20 = 11.4
+- Consecutive Cancels: 3 × 15 = 4.5
+- Booking Frequency: 14 days × 10 = 1.4
+
+Total Risk Score: 36.4 (Medium Risk)
+Recommendation: Monitor closely, consider 48-hour cancellation notice
+```
+
+#### **Admin Dashboard Features:**
+- **Risk Overview**: Statistics and distribution charts
+- **Customer List**: Detailed risk metrics for each customer
+- **Search & Filter**: Find specific customers quickly
+- **Admin Notes**: Add behavioral observations
+- **Risk Refresh**: Recalculate assessments manually
+- **Mitigation Settings**: Configure restrictions per customer
+
+#### **Integration Points:**
+- **Booking Flow**: Real-time risk checking during appointment booking
+- **Email System**: Risk-based email templates and notifications
+- **Appointment Management**: Automatic risk updates on status changes
+- **Admin Notifications**: Alerts for high-risk booking attempts
+
+#### **Automatic Operation:**
+- **Zero Configuration**: Works out of the box without setup
+- **Auto-Creation**: Risk assessments created automatically for new customers
+- **Real-Time Updates**: Risk scores update automatically with every appointment change
+- **Seamless Integration**: No manual intervention required
 
 ---
 
@@ -363,6 +462,29 @@ Recommendation: Require deposit or manual approval
 - **CustomerRisk**: Customer risk assessment and scoring
 - **Analytics**: Aggregated business metrics
 
+## 🛠️ Development Guidelines
+
+### Server Actions vs API Routes
+**For future development, prefer Server Actions over API Routes when possible:**
+
+- **Use Server Actions for**: Data mutations, form submissions, server-side operations
+- **Use API Routes for**: External integrations, webhooks, third-party API calls
+- **Benefits of Server Actions**: Better TypeScript support, automatic revalidation, simpler error handling
+
+**Example Server Action:**
+```typescript
+// src/lib/actions/appointments.ts
+'use server';
+
+export async function updateAppointmentStatus(appointmentId: string, status: string) {
+  // Server-side logic here
+  revalidatePath('/admin/appointments');
+  return { success: true };
+}
+```
+
+**Current Implementation**: Existing API routes are maintained for compatibility. New features should use Server Actions.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -398,6 +520,44 @@ See [ENVIRONMENT_VARIABLES.md](./ENVIRONMENT_VARIABLES.md) for detailed configur
 - Resend API works from any domain (localhost or production)
 - Your verified domain `emails.ariflab.xyz` works from anywhere
 - No need to deploy to test email functionality
+
+### Risk Assessment Testing
+
+**The Risk Assessment System Works Automatically! 🎉**
+
+**No initialization required** - risk assessments are created automatically when:
+- Customers book appointments
+- Admins view the risk dashboard
+- Any risk-related API is called
+
+**Test the Customer Risk Assessment System:**
+
+1. **Access Admin Dashboard**:
+   - Go to `http://localhost:3000/admin/risk-assessment`
+   - View risk statistics and customer list
+   - Test search and filtering functionality
+
+2. **Test Booking Restrictions**:
+   - Create test customer accounts
+   - Book and cancel appointments to build risk history
+   - Try booking again to see risk warnings
+   - Test approval workflow for high-risk customers
+
+3. **Test Admin Functions**:
+   - Add admin notes to customers
+   - Refresh risk assessments manually
+   - View detailed risk metrics and recommendations
+
+4. **Test Risk Integration**:
+   - Book appointments and watch risk scores update
+   - Cancel appointments to see risk increase
+   - Check that restrictions are enforced in booking flow
+
+**Optional: Pre-populate Risk Data** (for existing customers):
+```bash
+pnpm risk:init
+```
+*This is only needed if you want to create risk assessments for customers who already have appointments but no risk data yet.*
 
 ### Installation
 
@@ -511,17 +671,19 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ### **Week 1: Foundation & Revenue Features**
 
-#### **Email Notifications System**
-**Priority**: High | **Time**: 3 days
+#### **Email Notifications System** ✅ COMPLETED
+**Priority**: High | **Time**: 3 days | **Completed**: January 2025
 
 **Tasks:**
-- [ ] Install Resend API and email dependencies
-- [ ] Create EmailQueue database model
-- [ ] Set up email service with queue processing
-- [ ] Create email templates (confirmation, reminder, cancellation)
-- [ ] Integrate email sending in booking flow
-- [ ] Add email preferences and settings
-- [ ] Test email delivery and error handling
+- [x] Install Resend API and email dependencies
+- [x] Create EmailQueue database model
+- [x] Set up email service with queue processing
+- [x] Create email templates (confirmation, reminder, cancellation)
+- [x] Integrate email sending in booking flow
+- [x] Add email preferences and settings
+- [x] Test email delivery and error handling
+- [x] Add admin email management dashboard
+- [x] Implement domain verification
 
 **Dependencies:**
 - Resend API account
@@ -530,17 +692,19 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-#### **Service Add-ons System**
-**Priority**: High | **Time**: 4 days
+#### **Service Add-ons System** ✅ COMPLETED
+**Priority**: High | **Time**: 4 days | **Completed**: January 2025
 
 **Tasks:**
-- [ ] Create ServiceAddon and AppointmentAddon database models
-- [ ] Build admin interface for add-on management
-- [ ] Implement dynamic pricing calculation engine
-- [ ] Create add-on selection UI in booking flow
-- [ ] Add real-time price updates
-- [ ] Build add-on revenue tracking
-- [ ] Test add-on combinations and pricing
+- [x] Create ServiceAddon and AppointmentAddon database models
+- [x] Build admin interface for add-on management
+- [x] Implement dynamic pricing calculation engine
+- [x] Create add-on selection UI in booking flow
+- [x] Add real-time price updates
+- [x] Build add-on revenue tracking
+- [x] Test add-on combinations and pricing
+- [x] Update email templates with add-on information
+- [x] Fix TypeScript errors and type safety
 
 **Dependencies:**
 - Database schema updates

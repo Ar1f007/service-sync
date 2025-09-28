@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { deleteAppointment, updateAppointment } from "@/lib/data/dashboard/appointments";
 import { sendAppointmentConfirmation, sendAppointmentCancellation } from "@/lib/email";
 import prismaInstance from "@/lib/db";
+import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
 
 
 type RouteContext = {
@@ -31,6 +32,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         service: { select: { id: true, title: true, price: true, duration: true } },
         client: { select: { id: true, name: true, email: true } },
         employee: { include: { user: { select: { id: true, name: true } } } },
+        appointmentAddons: {
+          include: {
+            addon: { select: { id: true, name: true, price: true, duration: true } }
+          }
+        },
       },
     });
 
@@ -38,12 +44,30 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
     }
 
+    // Add cancellation tracking for admin cancellations
+    if (updateData.status === 'cancelled' && appointment.status !== 'cancelled') {
+      updateData.cancelledBy = session.user.id;
+      updateData.cancelledByRole = 'admin';
+      updateData.cancellationReason = updateData.cancellationReason || 'Cancelled by admin';
+    }
+
     const updatedAppointment = await updateAppointment(id, updateData, timezone);
 
     // Send appropriate email based on status change
     if (updateData.status === "confirmed" && appointment.status !== "confirmed") {
       try {
-        await sendAppointmentConfirmation(appointment, appointment.client);
+        // Transform appointment data to include addons in the format expected by email template
+        const appointmentWithAddons = {
+          ...appointment,
+          addons: appointment.appointmentAddons?.map(appointmentAddon => ({
+            id: appointmentAddon.addon.id,
+            name: appointmentAddon.addon.name,
+            price: appointmentAddon.addon.price,
+            duration: appointmentAddon.addon.duration,
+          })) || [],
+        };
+        
+        await sendAppointmentConfirmation(appointmentWithAddons, appointment.client);
       } catch (error) {
         console.error("Failed to send confirmation email:", error);
         // Don't fail the update if email fails
@@ -55,6 +79,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         console.error("Failed to send cancellation email:", error);
         // Don't fail the update if email fails
       }
+    }
+
+    // Update customer risk assessment
+    try {
+      await updateCustomerRiskOnAppointmentChange(id);
+    } catch (error) {
+      console.error("Failed to update customer risk assessment:", error);
+      // Don't fail the update if risk assessment update fails
     }
 
     return NextResponse.json(updatedAppointment);
@@ -106,6 +138,14 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     } catch (error) {
       console.error("Failed to send cancellation email:", error);
       // Don't fail the deletion if email fails
+    }
+
+    // Update customer risk assessment
+    try {
+      await updateCustomerRiskOnAppointmentChange(id);
+    } catch (error) {
+      console.error("Failed to update customer risk assessment:", error);
+      // Don't fail the deletion if risk assessment update fails
     }
 
     return NextResponse.json({ message: "Appointment deleted" }, { status: 200 });
