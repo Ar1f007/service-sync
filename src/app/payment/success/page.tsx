@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 interface PaymentSuccessPageProps {
-  searchParams: {
+  searchParams: Promise<{
     payment_intent?: string;
-  };
+  }>;
 }
 
 function PaymentSuccessContent({ payment_intent }: { payment_intent?: string }) {
@@ -52,14 +52,16 @@ function PaymentSuccessContent({ payment_intent }: { payment_intent?: string }) 
   );
 }
 
-export default function PaymentSuccessPage({ searchParams }: PaymentSuccessPageProps) {
+export default async function PaymentSuccessPage({ searchParams }: PaymentSuccessPageProps) {
+  const resolvedSearchParams = await searchParams;
+  
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     }>
-      <PaymentSuccessContent payment_intent={searchParams.payment_intent} />
+      <PaymentSuccessContent payment_intent={resolvedSearchParams.payment_intent} />
     </Suspense>
   );
 }

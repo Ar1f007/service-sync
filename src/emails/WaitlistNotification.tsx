@@ -45,7 +45,7 @@ export const WaitlistNotificationEmail = ({
   return (
     <Html>
       <Head />
-      <Preview>Your waitlist slot is now available! Confirm your booking within {expiresInMinutes} minutes.</Preview>
+      <Preview>Your waitlist slot is now available! Confirm your booking within {expiresInMinutes.toString()} minutes.</Preview>
       <Body style={main}>
         <Container style={container}>
           <Section style={logoContainer}>

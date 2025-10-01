@@ -1,7 +1,7 @@
 'use server';
 
 import { stripe, formatAmountForStripe } from '@/lib/stripe';
-import { db } from '@/lib/db';
+import db from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 
 export async function createPaymentIntent(

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
-import { db } from '@/lib/db';
+import db from '@/lib/db';
 import { headers } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
-  const signature = headers().get('stripe-signature');
+  const headersList = await headers();
+  const signature = headersList.get('stripe-signature');
 
   if (!signature) {
     return NextResponse.json(
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let event;
+  let event: any;
 
   try {
     event = stripe.webhooks.constructEvent(
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
             stripeChargeId: paymentIntent.latest_charge as string,
             paymentMethod: paymentIntent.payment_method_types?.[0],
             paidAt: new Date(),
-            stripeWebhookData: event.data.object,
+            stripeWebhookData: JSON.parse(JSON.stringify(event.data.object)),
           },
         });
 
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
           where: { stripePaymentId: paymentIntent.id },
           data: {
             status: 'failed',
-            stripeWebhookData: event.data.object,
+            stripeWebhookData: JSON.parse(JSON.stringify(event.data.object)),
           },
         });
 
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
           where: { stripePaymentId: paymentIntent.id },
           data: {
             status: 'canceled',
-            stripeWebhookData: event.data.object,
+            stripeWebhookData: JSON.parse(JSON.stringify(event.data.object)),
           },
         });
 

@@ -50,10 +50,12 @@ export default function ClientAppointmentsClient({
     const hoursUntilAppointment = (appointmentTime.getTime() - now.getTime()) / (1000 * 60 * 60);
     
     // Can cancel if:
-    // 1. Status is pending or confirmed
+    // 1. Status is pending, confirmed, or waitlist-waiting
     // 2. Appointment is in the future
     // 3. At least 2 hours notice (configurable)
-    return (appointment.status === 'pending' || appointment.status === 'confirmed') && 
+    return (appointment.status === 'pending' || 
+            appointment.status === 'confirmed' || 
+            appointment.status === 'waitlist-waiting') && 
            appointmentTime > now && 
            hoursUntilAppointment >= 2;
   };
@@ -63,14 +65,32 @@ export default function ClientAppointmentsClient({
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/appointments/${appointmentId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ reason }),
-      });
+      // Check if this is a waitlist entry
+      const isWaitlistEntry = appointmentId.startsWith('waitlist-');
+      const actualId = isWaitlistEntry ? appointmentId.replace('waitlist-', '') : appointmentId;
+
+      let response: Response;
+      if (isWaitlistEntry) {
+        // Cancel waitlist entry
+        response = await fetch(`/api/waitlist/${actualId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ reason }),
+        });
+      } else {
+        // Cancel regular appointment
+        response = await fetch(`/api/appointments/${actualId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ reason }),
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -193,11 +213,18 @@ export default function ClientAppointmentsClient({
                               ? "bg-green-100 text-green-800"
                               : appt.status === "pending"
                               ? "bg-yellow-100 text-yellow-800"
+                              : appt.status === "waitlist-waiting"
+                              ? "bg-blue-100 text-blue-800"
+                              : appt.status === "waitlist-notified"
+                              ? "bg-orange-100 text-orange-800"
                               : "bg-red-100 text-red-800"
                           }
                           style={{ textTransform: "uppercase" }}
                         >
-                          {appt.status}
+                          {appt.status.startsWith('waitlist-') 
+                            ? `Waitlist (${appt.status.replace('waitlist-', '')})`
+                            : appt.status
+                          }
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">
@@ -280,11 +307,18 @@ export default function ClientAppointmentsClient({
                               ? "bg-green-100 text-green-800"
                               : appt.status === "pending"
                               ? "bg-yellow-100 text-yellow-800"
+                              : appt.status === "waitlist-waiting"
+                              ? "bg-blue-100 text-blue-800"
+                              : appt.status === "waitlist-notified"
+                              ? "bg-orange-100 text-orange-800"
                               : "bg-red-100 text-red-800"
                           }
                           style={{ textTransform: "uppercase" }}
                         >
-                          {appt.status}
+                          {appt.status.startsWith('waitlist-') 
+                            ? `Waitlist (${appt.status.replace('waitlist-', '')})`
+                            : appt.status
+                          }
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right font-semibold">

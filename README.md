@@ -16,28 +16,39 @@ A modern, full-stack appointment booking platform built with Next.js, TypeScript
 - **Appointment Booking**: Real-time availability and conflict detection
 - **Dashboard**: Separate dashboards for clients, staff, and admins
 - **Responsive Design**: Mobile-friendly interface with Tailwind CSS
-- **Email Notifications**: Complete email system with queue processing
-  - Appointment confirmation emails
-  - Cancellation notifications
-  - Admin notifications for new bookings
-  - Professional email templates with branding
-  - Queue-based processing with retry logic
-  - Admin email management dashboard
-- **Payment Processing**: Secure payment integration with Stripe
+- **Email Notifications**: Comprehensive email system with queue processing
+  - **Appointment Emails**: Confirmation, cancellation, and reminder notifications
+  - **Waitlist Emails**: Slot availability, confirmation, and cancellation notifications
+  - **Admin Notifications**: New bookings, cancellations, and system alerts
+  - **Refund Notifications**: Automatic refund confirmations with details
+  - **Professional Templates**: Branded email templates with responsive design
+  - **Queue Processing**: Reliable email delivery with retry logic
+  - **Admin Dashboard**: Email management and monitoring interface
+- **Payment Processing**: Complete payment system with intelligent refunds
   - Stripe payment processing with multiple payment methods
   - Payment confirmation and success pages
-  - Refund handling with admin interface
+  - **Smart Refund System**: Automatic refunds with admin fee calculation
+    - **Client Cancellations**: 5% admin fee (min £5, max £50)
+    - **Admin Cancellations**: Full refunds (no admin fees)
+    - **No-Show Cancellations**: Full refunds
+    - **Automatic Processing**: Refunds processed via Stripe API
+    - **Refund Tracking**: Complete refund history and status
   - Payment history tracking and management
   - Webhook-based payment verification
-  - Admin payment management dashboard
-- **Waitlist Management**: FIFO queue system for full time slots
-  - Automatic waitlist enrollment when slots are unavailable
-  - Real-time notifications when slots become available
-  - Position tracking and queue management
-  - Automatic booking conversion with time limits
-  - Admin waitlist management interface with cleanup tools
-  - Email notifications for waitlist updates
-  - Automated daily cleanup of expired entries
+  - Admin payment management dashboard with refund controls
+- **Waitlist Management**: Complete overbooking system with customer notifications
+  - **Overbooking Strategy**: Allows multiple bookings per time slot
+  - **Smart Status Assignment**: First booking = confirmed, second = waitlist, third+ = full
+  - **Visual Indicators**: Green (available), Yellow (waitlist), Red (full)
+  - **Automatic Processing**: FIFO queue with 15-minute confirmation windows
+  - **Real-time Notifications**: Email alerts when slots become available
+  - **Customer Dashboard Integration**: Waitlist entries visible in "My Appointments"
+  - **Admin Management**: Complete waitlist dashboard with detail pages
+  - **Customer Cancellation**: Self-service waitlist cancellation with refunds
+  - **Admin Cancellation**: Admin can cancel waitlist entries with notifications
+  - **Automated Refunds**: Full refunds for cancelled waitlist entries
+  - **User-Friendly Info**: Clear explanation of waitlist policy
+  - **Automated Cleanup**: Daily removal of expired waitlist entries
 - **Customer Risk Assessment**: Advanced risk management system ✅ COMPLETED
   - Weighted risk scoring algorithm (5 behavioral factors)
   - Real-time risk calculation and updates
@@ -145,40 +156,49 @@ A modern, full-stack appointment booking platform built with Next.js, TypeScript
 **Completed**: January 2025
 
 #### Features Implemented:
-- ✅ Automatic waitlist enrollment when slots are full
-- ✅ FIFO (First In, First Out) queue processing
-- ✅ Real-time notifications when slots become available
-- ✅ Waitlist position tracking and management
-- ✅ Automatic booking conversion when slot opens
-- ✅ Waitlist expiration and cleanup system
-- ✅ Admin waitlist management interface
-- ✅ Email notifications for waitlist updates
+- ✅ **Overbooking Strategy**: Multiple bookings allowed per time slot
+- ✅ **Smart Status Assignment**: First=confirmed, second=waitlist, third+=full
+- ✅ **Visual Indicators**: Color-coded time slots (Green/Yellow/Red)
+- ✅ **FIFO Queue Processing**: Fair first-come-first-served system
+- ✅ **Real-time Notifications**: Email alerts when slots become available
+- ✅ **15-minute Confirmation Window**: Time-limited booking conversion
+- ✅ **User-Friendly Information**: Clear waitlist policy explanation
+- ✅ **Admin Management Interface**: Complete waitlist dashboard with detail pages
+- ✅ **Customer Dashboard Integration**: Waitlist entries visible in "My Appointments"
+- ✅ **Customer Self-Cancellation**: Self-service waitlist cancellation with refunds
+- ✅ **Admin Cancellation**: Admin can cancel waitlist entries with notifications
+- ✅ **Automated Refunds**: Full refunds for cancelled waitlist entries
+- ✅ **Automated Cleanup**: Daily removal of expired entries
+- ✅ **Email Templates**: Professional waitlist notifications and cancellations
 
 #### Technical Implementation:
-- **Algorithm**: FIFO queue with priority-based processing
-- **Database**: Waitlist table with timestamps and priority scores
-- **Notification System**: Real-time alerts via email and in-app
-- **Auto-booking**: Automatic conversion with time-limited confirmation
-- **Cleanup**: Automated removal of expired waitlist entries
-- **UI**: Seamless integration with booking flow
+- **Algorithm**: Overbooking with FIFO queue processing
+- **Database**: Waitlist table with conflict counting and status tracking
+- **UI**: Visual indicators with clear user guidance
+- **Notification System**: Email-based alerts with time limits
+- **Auto-booking**: Automatic conversion with 15-minute confirmation
+- **Cleanup**: Automated daily removal of expired entries
 - **Admin Panel**: Complete waitlist management at `/admin/waitlist`
 
-#### Why FIFO Algorithm?
-- Fair and transparent queue processing
-- Prevents queue jumping and ensures fairness
-- Simple to implement and understand
-- Handles multiple customers waiting for same slot
-- Maintains chronological order of requests
+#### Overbooking Strategy Benefits:
+- **Maximizes Revenue**: No lost bookings due to full slots
+- **Better Customer Experience**: Always allows booking attempts
+- **Fair Queue Management**: FIFO ensures chronological order
+- **Transparent Process**: Clear visual indicators for customers
+- **Automatic Processing**: System handles notifications and conversions
 
-#### Workflow:
-1. Customer tries to book occupied slot
-2. System shows waitlist enrollment option
-3. Customer joins waitlist with timestamp and position
-4. When original booking is cancelled:
-   - System finds next person in queue (FIFO)
-   - Sends notification with time limit (15 minutes)
-   - If confirmed, converts to booking
-   - If not confirmed, moves to next person in queue
+#### Status Criteria:
+- **🟢 Available**: `conflictCount === 0` - No existing appointments
+- **🟡 Waitlist**: `conflictCount === 1` - One existing appointment, can join queue
+- **🔴 Full**: `conflictCount >= 2` - Two or more appointments, disabled
+
+#### User Experience:
+1. Customer sees all time slots with color-coded availability
+2. Green slots can be booked immediately
+3. Yellow slots can be booked and will join waitlist
+4. Red slots are disabled (too many conflicts)
+5. Waitlist customers get notified when slots open
+6. 15-minute window to confirm or lose the spot
 
 ---
 
@@ -794,22 +814,27 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ### **Week 3: Core Business Features**
 
-#### **Waitlist Management System**
-**Priority**: High | **Time**: 3 days
+#### **Waitlist Management System** ✅ COMPLETED
+**Priority**: High | **Time**: 3 days | **Completed**: January 2025
 
 **Tasks:**
-- [ ] Create Waitlist database model
-- [ ] Implement FIFO queue management system
-- [ ] Build waitlist enrollment flow
-- [ ] Create real-time notification system
-- [ ] Add auto-booking conversion with time limits
-- [ ] Build admin waitlist management interface
-- [ ] Test queue processing and notifications
+- [x] Create Waitlist database model
+- [x] Implement FIFO queue management system
+- [x] Build waitlist enrollment flow with overbooking strategy
+- [x] Create real-time notification system
+- [x] Add auto-booking conversion with time limits
+- [x] Build admin waitlist management interface with detail pages
+- [x] Test queue processing and notifications
+- [x] **Customer Dashboard Integration**: Waitlist entries visible in "My Appointments"
+- [x] **Customer Self-Cancellation**: Self-service waitlist cancellation with refunds
+- [x] **Admin Cancellation**: Admin can cancel waitlist entries with notifications
+- [x] **Automated Refunds**: Full refunds for cancelled waitlist entries
+- [x] **Email Notifications**: Complete waitlist email system
 
 **Dependencies:**
-- FIFO queue algorithm
-- Notification system
-- Auto-booking conversion logic
+- FIFO queue algorithm ✅
+- Notification system ✅
+- Auto-booking conversion logic ✅
 
 ---
 
@@ -824,11 +849,15 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [x] Add payment confirmation and receipt system
 - [x] Create refund management interface
 - [x] Test payment flow and webhook processing
+- [x] **Smart Refund System**: Automatic refunds with admin fee calculation
+- [x] **Refund Processing**: Client cancellations (5% fee), Admin cancellations (full refund)
+- [x] **Refund Tracking**: Complete refund history and status management
+- [x] **Waitlist Refunds**: Automatic refunds for cancelled waitlist entries
 
 **Dependencies:**
-- Stripe account and API keys
-- Payment form components
-- Webhook security implementation
+- Stripe account and API keys ✅
+- Payment form components ✅
+- Webhook security implementation ✅
 
 ---
 

@@ -1,19 +1,18 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'better-auth/react';
-import { auth } from '@/lib/auth';
 import { getWaitlistEntries } from '@/lib/actions/waitlist';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
-import { Clock, Users, RefreshCw, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, Users, RefreshCw, Eye, CheckCircle, } from 'lucide-react';
 import Link from 'next/link';
 import WaitlistCleanupButton from '@/components/WaitlistCleanupButton';
+import { getSession } from '@/lib/session';
 
 async function WaitlistContent() {
-  const session = await getServerSession({ auth });
+  const session = await getSession();
   
   if (!session?.user || session.user.role !== 'admin') {
     redirect('/dashboard');
@@ -33,7 +32,7 @@ async function WaitlistContent() {
     );
   }
 
-  const waitlistEntries = result.waitlistEntries;
+  const waitlistEntries = result.waitlistEntries || [];
 
   const getStatusBadge = (status: string) => {
     const variants = {

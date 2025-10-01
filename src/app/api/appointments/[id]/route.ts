@@ -5,6 +5,7 @@ import { deleteAppointment, updateAppointment } from "@/lib/data/dashboard/appoi
 import { sendAppointmentConfirmation, sendAppointmentCancellation } from "@/lib/email";
 import prismaInstance from "@/lib/db";
 import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
+import { processRefund } from "@/lib/actions/refunds";
 
 
 type RouteContext = {
@@ -52,6 +53,35 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     const updatedAppointment = await updateAppointment(id, updateData, timezone);
+
+    // Process refund if appointment is cancelled and has a successful payment
+    if (updateData.status === 'cancelled' && appointment.status !== 'cancelled') {
+      try {
+        const payment = await prismaInstance.payment.findFirst({
+          where: {
+            appointmentId: id,
+            status: 'succeeded'
+          }
+        });
+
+        if (payment) {
+          const refundResult = await processRefund(
+            payment.id,
+            'admin_cancelled',
+            updateData.cancellationReason || 'Cancelled by admin'
+          );
+
+          if (refundResult.success) {
+            console.log('Refund processed successfully:', refundResult.refund);
+          } else {
+            console.error('Failed to process refund:', refundResult.error);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing refund:', error);
+        // Don't fail the appointment cancellation if refund fails
+      }
+    }
 
     // Send appropriate email based on status change
     if (updateData.status === "confirmed" && appointment.status !== "confirmed") {

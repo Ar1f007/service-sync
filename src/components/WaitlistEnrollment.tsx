@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Clock, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import { addToWaitlist } from '@/lib/actions/waitlist';
+import { authClient } from '@/lib/auth-client';
 
 interface WaitlistEnrollmentProps {
   serviceId: string;
@@ -28,16 +29,23 @@ export default function WaitlistEnrollment({
   onSuccess,
   onError,
 }: WaitlistEnrollmentProps) {
+  const { data: session } = authClient.useSession();
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleEnroll = async () => {
+    if (!session?.user?.id) {
+      setError('You must be logged in to join the waitlist');
+      return;
+    }
+
     setIsEnrolling(true);
     setError(null);
 
     try {
       const result = await addToWaitlist(
+        session.user.id,
         serviceId,
         employeeId,
         requestedDateTime,

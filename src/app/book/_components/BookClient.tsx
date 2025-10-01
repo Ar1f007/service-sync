@@ -114,6 +114,7 @@ export default function BookClient({ services }: BookClientProps) {
 	>("idle");
 	const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
 	const [timeSlots, setTimeSlots] = useState<string[]>([]);
+	const [slotAvailability, setSlotAvailability] = useState<Record<string, { available: boolean; conflictCount: number; status: string }>>({});
 	const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
 	const [isCalendarOpen, setIsCalendarOpen] = useState(false); // Add state for calendar popover
 	const [availableAddons, setAvailableAddons] = useState<Addon[]>([]);
@@ -335,70 +336,65 @@ export default function BookClient({ services }: BookClientProps) {
 				const { appointments }: { appointments: Appointment[] } =
 					await response.json();
 
-				// Filter out conflicting time slots
+				// Show all time slots - conflicts will be handled during booking
 				const duration = pricingData?.totalDuration || selectedService.duration;
-				const availableSlots = slots.filter((slot) => {
-					// Create slot start time in Asia/Dhaka timezone
+				
+				// Create slot availability data
+				const slotsWithAvailability = slots.map((slot) => {
 					const slotDateTimeStr = `${selectedDate}T${slot}:00`;
 					const slotDate = new Date(slotDateTimeStr);
 					if (!isValid(slotDate)) {
-						console.error(`Invalid slot date: ${slotDateTimeStr}`);
-						return false;
+						return { slot, available: false, conflictCount: 0 };
 					}
+					
 					const slotStart = toZonedTime(slotDate, timezone);
 					const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
 
-					// Validate slotStart and slotEnd
 					if (!isValid(slotStart) || !isValid(slotEnd)) {
-						console.error(
-							`Invalid slot times: start=${slotStart}, end=${slotEnd}`,
-						);
-						return false;
+						return { slot, available: false, conflictCount: 0 };
 					}
 
-					console.log(
-						`Checking slot: ${slotDateTimeStr} (${slotStart.toISOString()} to ${slotEnd.toISOString()})`,
-					);
-
-					// Check for conflicts with existing appointments
-					return !appointments.some((appt) => {
-						// Validate appt.dateTime
+					// Count conflicts with existing appointments
+					const conflictCount = appointments.filter((appt) => {
 						const apptDate = new Date(appt.dateTime);
-						if (!isValid(apptDate)) {
-							console.error(`Invalid appointment dateTime: ${appt.dateTime}`);
-							return false;
-						}
+						if (!isValid(apptDate)) return false;
+						
 						const apptStart = toZonedTime(apptDate, timezone);
 						const apptEnd = new Date(
 							apptStart.getTime() + (appt.duration || 30) * 60 * 1000,
 						);
 
-						if (!isValid(apptStart) || !isValid(apptEnd)) {
-							console.error(
-								`Invalid appointment times: start=${apptStart}, end=${apptEnd}`,
-							);
-							return false;
-						}
-
-						console.log(
-							`  Against appt ${appt.id}: ${appt.dateTime} (${apptStart.toISOString()} to ${apptEnd.toISOString()})`,
-						);
+						if (!isValid(apptStart) || !isValid(apptEnd)) return false;
 
 						// Check for overlap
-						const hasOverlap =
+						return (
 							(slotStart >= apptStart && slotStart < apptEnd) ||
 							(slotEnd > apptStart && slotEnd <= apptEnd) ||
-							(slotStart <= apptStart && slotEnd >= apptEnd);
+							(slotStart <= apptStart && slotEnd >= apptEnd)
+						);
+					}).length;
 
-						if (hasOverlap) {
-							console.log(`  Conflict found with appt ${appt.id}`);
-						}
-						return hasOverlap;
-					});
+					return {
+						slot,
+						available: conflictCount === 0,
+						conflictCount,
+						status: conflictCount === 0 ? 'available' : conflictCount === 1 ? 'waitlist' : 'full'
+					};
 				});
 
-				console.log(`Available slots for ${selectedDate}:`, availableSlots);
-				setTimeSlots(availableSlots);
+				console.log(`Time slots for ${selectedDate}:`, slotsWithAvailability);
+				
+				// Store slot availability data
+				const availabilityMap: Record<string, { available: boolean; conflictCount: number; status: string }> = {};
+				slotsWithAvailability.forEach(slotData => {
+					availabilityMap[slotData.slot] = {
+						available: slotData.available,
+						conflictCount: slotData.conflictCount,
+						status: slotData.status || 'available'
+					};
+				});
+				setSlotAvailability(availabilityMap);
+				setTimeSlots(slotsWithAvailability.map(s => s.slot));
 			} catch (error) {
 				console.error("Error fetching time slots:", error);
 				setTimeSlots([]);
@@ -451,7 +447,7 @@ export default function BookClient({ services }: BookClientProps) {
 			// Calculate total price including add-ons
 			let totalPrice = selectedService.price;
 			if (data.addonIds && data.addonIds.length > 0) {
-				const selectedAddons = addons.filter(addon => data.addonIds.includes(addon.id));
+				const selectedAddons = availableAddons.filter(addon => data.addonIds.includes(addon.id));
 				totalPrice += selectedAddons.reduce((sum, addon) => sum + addon.price, 0);
 			}
 
@@ -479,17 +475,16 @@ export default function BookClient({ services }: BookClientProps) {
 
 			if (!response.ok) {
 				const errorData = await response.json();
-				
-				// If it's a time slot conflict, show waitlist option instead of error
-				if (errorData.error === "Time slot unavailable") {
-					setBookingStatus("waitlist");
-					return;
-				}
-				
 				throw new Error(errorData.error || "Failed to book appointment");
 			}
 
 			const appointmentData = await response.json();
+			
+			// Check if appointment was put on waitlist
+			if (appointmentData.waitlist) {
+				setBookingStatus("waitlist");
+				return;
+			}
 			
 			// If payment is required and customer doesn't require approval, redirect to payment
 			if (totalPrice > 0 && !customerRisk?.requiresApproval) {
@@ -653,30 +648,24 @@ export default function BookClient({ services }: BookClientProps) {
 							</div>
 						) : bookingStatus === "waitlist" ? (
 							<div className="py-6">
-								<WaitlistEnrollment
-									serviceId={form.getValues("serviceId")}
-									employeeId={form.getValues("employeeId")}
-									requestedDateTime={new Date(`${form.getValues("date")}T${form.getValues("time")}:00`)}
-									duration={selectedServiceData ? selectedServiceData.duration + (form.getValues("addonIds") || []).reduce((sum, addonId) => {
-										const addon = availableAddons.find(a => a.id === addonId);
-										return sum + (addon?.duration || 0);
-									}, 0) : 0}
-									selectedAddonIds={form.getValues("addonIds") || []}
-									totalPrice={totalPrice}
-									onSuccess={() => {
-										setBookingStatus("success");
-										setTimeout(() => {
-											setIsBookingDialogOpen(false);
-											setBookingStatus("idle");
-											router.push("/dashboard/appointments");
-										}, 2000);
-									}}
-									onError={(error) => {
-										form.setError("root", { message: error });
-										setBookingStatus("error");
-									}}
-								/>
-								<div className="flex justify-center mt-4">
+								<div className="text-center mb-4">
+									<AlertCircle className="w-12 h-12 text-yellow-600 mx-auto mb-3" />
+									<h3 className="text-lg font-semibold text-slate-900 mb-2">
+										Time Slot Full
+									</h3>
+									<p className="text-slate-600 mb-4">
+										This time slot is already booked. You have been automatically added to the waitlist.
+									</p>
+									<div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+										<p className="text-sm text-yellow-800">
+											<strong>What happens next?</strong><br />
+											• You'll be notified if a slot becomes available<br />
+											• You have 15 minutes to confirm when notified<br />
+											• You can cancel anytime from your dashboard
+										</p>
+									</div>
+								</div>
+								<div className="flex justify-center space-x-2">
 									<Button
 										variant="outline"
 										onClick={() => {
@@ -685,6 +674,18 @@ export default function BookClient({ services }: BookClientProps) {
 										}}
 									>
 										Close
+									</Button>
+									<Button
+										onClick={() => {
+											setBookingStatus("success");
+											setTimeout(() => {
+												setIsBookingDialogOpen(false);
+												setBookingStatus("idle");
+												router.push("/dashboard/appointments");
+											}, 1000);
+										}}
+									>
+										View My Appointments
 									</Button>
 								</div>
 							</div>
@@ -914,24 +915,44 @@ export default function BookClient({ services }: BookClientProps) {
 																</p>
 															</div>
 														) : timeSlots.length > 0 ? (
-															timeSlots.map((time) => (
-																<Button
-																	key={time}
-																	variant={
-																		field.value === time ? "default" : "outline"
-																	}
-																	size="sm"
-																	onClick={() => field.onChange(time)}
-																	className={
-																		field.value === time
-																			? "bg-teal-700 hover:bg-teal-800"
-																			: ""
-																	}
-																	type="button"
-																>
-																	{time}
-																</Button>
-															))
+															timeSlots.map((time) => {
+																const availability = slotAvailability[time];
+																const isSelected = field.value === time;
+																
+																const getButtonVariant = () => {
+																	if (isSelected) return "default";
+																	if (availability?.status === 'available') return "outline";
+																	if (availability?.status === 'waitlist') return "outline";
+																	return "outline";
+																};
+																
+																const getButtonClassName = () => {
+																	if (isSelected) return "bg-teal-700 hover:bg-teal-800";
+																	if (availability?.status === 'available') return "border-green-500 text-green-700 hover:bg-green-50";
+																	if (availability?.status === 'waitlist') return "border-yellow-500 text-yellow-700 hover:bg-yellow-50";
+																	return "border-red-500 text-red-700 hover:bg-red-50 opacity-60";
+																};
+																
+																const getButtonText = () => {
+																	if (availability?.status === 'available') return time;
+																	if (availability?.status === 'waitlist') return `${time} (Waitlist)`;
+																	return `${time} (Full)`;
+																};
+																
+																return (
+																	<Button
+																		key={time}
+																		variant={getButtonVariant()}
+																		size="sm"
+																		onClick={() => field.onChange(time)}
+																		className={getButtonClassName()}
+																		type="button"
+																		disabled={availability?.status === 'full'}
+																	>
+																		{getButtonText()}
+																	</Button>
+																);
+															})
 														) : (
 															<p className="text-sm text-slate-600 col-span-3">
 																No available time slots. Please select a
@@ -1114,6 +1135,41 @@ export default function BookClient({ services }: BookClientProps) {
 									<li>• A confirmation email will be sent to you shortly</li>
 									<li>• For questions, contact us at (555) 123-4567</li>
 								</ul>
+							</div>
+						</div>
+					</CardContent>
+				</Card>
+
+				{/* Waitlist Information */}
+				<Card className="bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200">
+					<CardContent className="p-6">
+						<div className="flex items-start space-x-4">
+							<div className="flex-shrink-0">
+								<Clock className="w-6 h-6 text-yellow-700" />
+							</div>
+							<div>
+								<h3 className="font-semibold text-slate-900 mb-2">
+									Time Slot Availability
+								</h3>
+								<div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
+									<div className="flex items-center space-x-2">
+										<div className="w-3 h-3 bg-green-500 rounded-full"></div>
+										<span><strong>Available:</strong> Ready to book</span>
+									</div>
+									<div className="flex items-center space-x-2">
+										<div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+										<span><strong>Waitlist:</strong> Join the queue</span>
+									</div>
+									<div className="flex items-center space-x-2">
+										<div className="w-3 h-3 bg-red-500 rounded-full"></div>
+										<span><strong>Full:</strong> No more spots</span>
+									</div>
+								</div>
+								<div className="mt-3 p-3 bg-yellow-100 rounded-lg">
+									<p className="text-sm text-yellow-800">
+										<strong>Waitlist Policy:</strong> If a time slot shows "Waitlist", you can still book and will be automatically added to our queue. If someone cancels, you'll be notified and have 15 minutes to confirm your spot.
+									</p>
+								</div>
 							</div>
 						</div>
 					</CardContent>

@@ -1,22 +1,21 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'better-auth/react';
-import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
+
+import db from '@/lib/db';
 import PaymentForm from '@/components/PaymentForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { Clock, User, CreditCard } from 'lucide-react';
+import { getSession } from '@/lib/session';
 
 interface PaymentPageProps {
-  searchParams: {
+  searchParams: Promise<{
     appointmentId?: string;
-  };
+  }>;
 }
 
 async function PaymentContent({ appointmentId }: { appointmentId: string }) {
-  const session = await getServerSession({ auth });
+  const session = await getSession();
   
   if (!session?.user) {
     redirect('/sign-in');
@@ -136,12 +135,6 @@ async function PaymentContent({ appointmentId }: { appointmentId: string }) {
               amount={appointment.totalPrice}
               customerEmail={appointment.client.email}
               customerName={appointment.client.name || undefined}
-              onSuccess={() => {
-                // Payment success will be handled by the form redirect
-              }}
-              onError={(error) => {
-                console.error('Payment error:', error);
-              }}
             />
           </div>
         </div>
@@ -150,8 +143,9 @@ async function PaymentContent({ appointmentId }: { appointmentId: string }) {
   );
 }
 
-export default function PaymentPage({ searchParams }: PaymentPageProps) {
-  const appointmentId = searchParams.appointmentId;
+export default async function PaymentPage({ searchParams }: PaymentPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const appointmentId = resolvedSearchParams.appointmentId;
 
   if (!appointmentId) {
     redirect('/dashboard/appointments');

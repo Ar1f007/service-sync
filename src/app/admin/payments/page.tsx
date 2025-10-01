@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'better-auth/react';
-import { auth } from '@/lib/auth';
+
 import { getPayments } from '@/lib/actions/payments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,9 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { CreditCard, Eye, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { getSession } from '@/lib/session';
 
 async function PaymentsContent() {
-  const session = await getServerSession({ auth });
+  const session = await getSession();
   
   if (!session?.user || session.user.role !== 'admin') {
     redirect('/dashboard');
@@ -32,7 +32,7 @@ async function PaymentsContent() {
     );
   }
 
-  const payments = result.payments;
+  const payments = result.payments || [];
 
   const getStatusBadge = (status: string) => {
     const variants = {

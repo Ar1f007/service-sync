@@ -26,6 +26,7 @@ export async function getClientAppointments(
 	}
 
 	try {
+		// Get regular appointments
 		const appointments = await prismaInstance.appointment.findMany({
 			where: { clientId },
 			include: {
@@ -42,7 +43,22 @@ export async function getClientAppointments(
 			},
 		});
 
-		return appointments.map((appt) => {
+		// Get waitlist entries
+		const waitlistEntries = await prismaInstance.waitlist.findMany({
+			where: { 
+				clientId,
+				status: { in: ['waiting', 'notified'] } // Only show active waitlist entries
+			},
+			include: {
+				service: {
+					select: { id: true, title: true, price: true, duration: true },
+				},
+				employee: { include: { user: { select: { id: true, name: true } } } },
+			},
+		});
+
+		// Process regular appointments
+		const processedAppointments = appointments.map((appt) => {
 			// Calculate total price including add-ons
 			const addonPrice = appt.appointmentAddons.reduce((sum, aa) => sum + aa.addon.price, 0);
 			const totalPrice = appt.service.price + addonPrice;
@@ -72,6 +88,28 @@ export async function getClientAppointments(
 				addons: addons.length > 0 ? addons : undefined,
 			};
 		});
+
+		// Process waitlist entries
+		const processedWaitlistEntries = waitlistEntries.map((entry) => ({
+			id: `waitlist-${entry.id}`, // Prefix to distinguish from appointments
+			service: entry.service,
+			client: { id: clientId, name: null }, // We don't have client info in waitlist
+			employee: {
+				id: entry.employeeId,
+				user: {
+					id: entry.employee.user.id,
+					name: entry.employee.user.name || ""
+				}
+			},
+			dateTime: toZonedTime(entry.requestedDateTime, timezone).toISOString(),
+			status: `waitlist-${entry.status}`, // Prefix to distinguish status
+			totalPrice: entry.totalPrice || 0,
+			addons: [], // Waitlist entries don't have addons in this context
+		}));
+
+		// Combine and sort by date
+		const allEntries = [...processedAppointments, ...processedWaitlistEntries];
+		return allEntries.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
 	} catch (error) {
 		console.error("Failed to fetch client appointments:", error);
 		// In a real application, you might want to throw a more specific error

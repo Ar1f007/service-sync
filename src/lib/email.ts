@@ -1,8 +1,6 @@
 import { Resend } from 'resend';
 import prismaInstance from './db';
 import { EMAIL_MAX_RETRY_ATTEMPTS, EMAIL_RETRY_DELAY } from './utils';
-import WaitlistNotificationEmail from '../emails/WaitlistNotification';
-import WaitlistConfirmationEmail from '../emails/WaitlistConfirmation';
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'dummy-key');
 
@@ -272,21 +270,56 @@ const emailTemplates: Record<string, EmailTemplate> = {
       </div>
     `
   },
-  waitlistNotification: {
-    name: 'waitlistNotification',
-    subject: 'Your Waitlist Slot is Available - ServiceSync',
-    render: (data) => {
-      const { render } = require('@react-email/render');
-      return render(WaitlistNotificationEmail(data));
-    }
-  },
   waitlistConfirmation: {
     name: 'waitlistConfirmation',
     subject: 'Waitlist Booking Confirmed - ServiceSync',
-    render: (data) => {
-      const { render } = require('@react-email/render');
-      return render(WaitlistConfirmationEmail(data));
-    }
+    render: (data) => `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d9488;">Waitlist Booking Confirmed!</h2>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
+        <p>Your waitlist booking has been successfully confirmed!</p>
+        
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3>Appointment Details</h3>
+          <p><strong>Service:</strong> ${data.appointment.service.title}</p>
+          <p><strong>Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
+          <p><strong>Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
+        </div>
+        
+        <p>We look forward to seeing you!</p>
+        <p>Best regards,<br>ServiceSync Team</p>
+      </div>
+    `
+  },
+  waitlistCancellation: {
+    name: 'waitlistCancellation',
+    subject: 'Waitlist Entry Cancelled - ServiceSync',
+    render: (data) => `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #dc2626;">Waitlist Entry Cancelled</h2>
+        <p>Dear ${data.customer.name || 'Valued Customer'},</p>
+        <p>We regret to inform you that your waitlist entry has been cancelled.</p>
+        
+        <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #fecaca;">
+          <h3 style="color: #991b1b;">Cancelled Entry Details</h3>
+          <p><strong>Service:</strong> ${data.appointment.service.title}</p>
+          <p><strong>Requested Date:</strong> ${new Date(data.appointment.dateTime).toLocaleDateString()}</p>
+          <p><strong>Requested Time:</strong> ${new Date(data.appointment.dateTime).toLocaleTimeString()}</p>
+          <p><strong>Staff:</strong> ${data.appointment.employee.user.name || 'TBA'}</p>
+          <p><strong>Total Price:</strong> £${((data.appointment.totalPrice || 0) / 100).toFixed(2)}</p>
+        </div>
+        
+        <div style="background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #bae6fd;">
+          <p style="color: #1e40af; margin: 0; font-size: 14px;">
+            <strong>Refund Information:</strong> If you paid for this waitlist entry, a full refund will be processed automatically within 5-7 business days.
+          </p>
+        </div>
+        
+        <p>We apologize for any inconvenience. You can book a new appointment anytime.</p>
+        <p>Best regards,<br>ServiceSync Team</p>
+      </div>
+    `
   }
 };
 
@@ -448,7 +481,7 @@ export async function sendAppointmentCancellation(appointment: Appointment, cust
   }
 }
 
-export async function sendWaitlistNotification(appointment: Appointment, customer: Customer): Promise<void> {
+export async function sendWaitlistSlotNotification(appointment: Appointment, customer: Customer): Promise<void> {
   await queueEmail({
     to: customer.email,
     subject: 'Slot Available - ServiceSync',
@@ -482,24 +515,36 @@ export async function sendAdminNotification(appointment: Appointment, customer: 
 }
 
 // Waitlist notification email
-export async function sendWaitlistNotification(waitlistEntry: any) {
-  const { client, service, employee, requestedDateTime, position } = waitlistEntry;
+export async function sendWaitlistNotification(waitlistEntry: {
+  id: string;
+  client: { name: string | null; email: string };
+  service: { id: string; title: string; price: number; duration: number };
+  employee: { user: { id: string; name: string | null } };
+  requestedDateTime: Date;
+  position: number;
+}) {
+  const { client, service, employee, requestedDateTime } = waitlistEntry;
   
-  const confirmationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/waitlist/confirm/${waitlistEntry.id}`;
+  // Create appointment and customer objects to match EmailData interface
+  const appointment = {
+    id: waitlistEntry.id,
+    service: { id: service.id, title: service.title, price: service.price, duration: service.duration },
+    employee: { user: { id: employee.user.id, name: employee.user.name } },
+    dateTime: requestedDateTime,
+    status: 'available',
+    totalPrice: service.price,
+  };
+  
+  const customer = {
+    name: client.name,
+    email: client.email,
+  };
   
   const emailData = {
     to: client.email,
     subject: 'Your Waitlist Slot is Available - ServiceSync',
     template: 'waitlistNotification',
-    data: {
-      clientName: client.name || 'Valued Customer',
-      serviceName: service.title,
-      employeeName: employee.user.name || 'Our Staff',
-      requestedDateTime: requestedDateTime.toISOString(),
-      position,
-      confirmationUrl,
-      expiresInMinutes: 15,
-    },
+    data: { appointment, customer },
   };
 
   // Try to send immediately, fallback to queue if fails
@@ -510,11 +555,18 @@ export async function sendWaitlistNotification(waitlistEntry: any) {
 }
 
 // Waitlist confirmation email
-export async function sendWaitlistConfirmation(waitlistEntry: any, appointment: any) {
+export async function sendWaitlistConfirmation(waitlistEntry: {
+  client: { name: string | null; email: string };
+  service: { id: string; title: string; price: number; duration: number };
+  employee: { user: { id: string; name: string | null } };
+  requestedDateTime: Date;
+  selectedAddonIds?: string[];
+  totalPrice: number;
+}, appointment: { id: string }) {
   const { client, service, employee, requestedDateTime, selectedAddonIds, totalPrice } = waitlistEntry;
   
   // Get addon details if any
-  let addons: any[] = [];
+  let addons: Addon[] = [];
   if (selectedAddonIds && selectedAddonIds.length > 0) {
     const addonDetails = await prismaInstance.serviceAddon.findMany({
       where: {
@@ -523,26 +575,76 @@ export async function sendWaitlistConfirmation(waitlistEntry: any, appointment: 
         isActive: true,
       },
       select: {
+        id: true,
         name: true,
         price: true,
+        duration: true,
       },
     });
     addons = addonDetails;
   }
   
+  // Create appointment and customer objects to match EmailData interface
+  const appointmentData = {
+    id: appointment.id,
+    service: { id: service.id, title: service.title, price: service.price, duration: service.duration },
+    employee: { user: { id: employee.user.id, name: employee.user.name } },
+    dateTime: requestedDateTime,
+    status: 'confirmed',
+    totalPrice,
+    addons,
+  };
+  
+  const customer = {
+    name: client.name,
+    email: client.email,
+  };
+  
   const emailData = {
     to: client.email,
     subject: 'Waitlist Booking Confirmed - ServiceSync',
     template: 'waitlistConfirmation',
-    data: {
-      clientName: client.name || 'Valued Customer',
-      serviceName: service.title,
-      employeeName: employee.user.name || 'Our Staff',
-      appointmentDateTime: requestedDateTime.toISOString(),
-      appointmentId: appointment.id,
-      totalPrice,
-      addons,
-    },
+    data: { appointment: appointmentData, customer },
+  };
+
+  // Try to send immediately, fallback to queue if fails
+  const sent = await sendEmail(emailData);
+  if (!sent) {
+    await queueEmail(emailData);
+  }
+}
+
+export async function sendWaitlistCancellation(waitlistEntry: {
+  id: string;
+  client: { name: string | null; email: string };
+  service: { id: string; title: string; price: number; duration: number };
+  employee: { user: { id: string; name: string | null } };
+  requestedDateTime: Date;
+  totalPrice: number | null;
+}, _customer: { name: string | null; email: string }) {
+  const { client, service, employee, requestedDateTime, totalPrice } = waitlistEntry;
+  
+  // Create appointment and customer objects to match EmailData interface
+  const appointmentData = {
+    id: waitlistEntry.id,
+    service: { id: service.id, title: service.title, price: service.price, duration: service.duration },
+    employee: { user: { id: employee.user.id, name: employee.user.name } },
+    dateTime: requestedDateTime,
+    status: 'cancelled',
+    totalPrice: totalPrice || 0,
+    addons: [],
+  };
+  
+  const customerData = {
+    name: client.name,
+    email: client.email,
+  };
+  
+  const emailData = {
+    to: client.email,
+    subject: 'Waitlist Entry Cancelled - ServiceSync',
+    template: 'waitlistCancellation',
+    data: { appointment: appointmentData, customer: customerData },
   };
 
   // Try to send immediately, fallback to queue if fails

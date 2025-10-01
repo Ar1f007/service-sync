@@ -1,8 +1,8 @@
 'use server';
 
-import { db } from '@/lib/db';
+import db from '@/lib/db';
 import { revalidatePath } from 'next/cache';
-import { sendWaitlistNotification, sendWaitlistConfirmation } from '@/lib/email';
+import { sendWaitlistNotification, sendWaitlistConfirmation, sendWaitlistCancellation } from '@/lib/email';
 
 export async function addToWaitlist(
   clientId: string,
@@ -92,7 +92,7 @@ export async function getWaitlistEntries(
   status?: string
 ) {
   try {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     
     if (serviceId) where.serviceId = serviceId;
     if (employeeId) where.employeeId = employeeId;
@@ -119,6 +119,38 @@ export async function getWaitlistEntries(
     return { success: true, waitlistEntries };
   } catch (error) {
     console.error('Error fetching waitlist entries:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+export async function getWaitlistEntryById(waitlistId: string) {
+  try {
+    const waitlistEntry = await db.waitlist.findUnique({
+      where: { id: waitlistId },
+      include: {
+        client: true,
+        service: true,
+        employee: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!waitlistEntry) {
+      return {
+        success: false,
+        error: 'Waitlist entry not found',
+      };
+    }
+
+    return { success: true, waitlistEntry };
+  } catch (error) {
+    console.error('Error fetching waitlist entry:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -334,7 +366,10 @@ export async function confirmWaitlistBooking(waitlistId: string) {
 
     // Send confirmation email
     try {
-      await sendWaitlistConfirmation(waitlistEntry, appointment);
+      await sendWaitlistConfirmation({
+        ...waitlistEntry,
+        totalPrice: waitlistEntry.totalPrice || 0,
+      }, appointment);
     } catch (emailError) {
       console.error('Failed to send waitlist confirmation email:', emailError);
       // Don't fail the operation if email fails
@@ -360,6 +395,13 @@ export async function cancelWaitlistEntry(waitlistId: string) {
   try {
     const waitlistEntry = await db.waitlist.findUnique({
       where: { id: waitlistId },
+      include: {
+        client: true,
+        service: true,
+        employee: {
+          include: { user: true }
+        }
+      }
     });
 
     if (!waitlistEntry) {
@@ -381,6 +423,47 @@ export async function cancelWaitlistEntry(waitlistId: string) {
       where: { id: waitlistId },
       data: { status: 'cancelled' },
     });
+
+    // Send cancellation notification to customer
+    try {
+      await sendWaitlistCancellation(waitlistEntry, waitlistEntry.client);
+    } catch (error) {
+      console.error('Failed to send waitlist cancellation email:', error);
+      // Don't fail the cancellation if email fails
+    }
+
+    // Process refund if there's a payment
+    try {
+      // Find payment by looking for appointments with this waitlist entry
+      const appointment = await db.appointment.findFirst({
+        where: {
+          clientId: waitlistEntry.clientId,
+          serviceId: waitlistEntry.serviceId,
+          employeeId: waitlistEntry.employeeId,
+          dateTime: waitlistEntry.requestedDateTime,
+          status: 'waitlist'
+        }
+      });
+
+      const payment = appointment ? await db.payment.findFirst({
+        where: {
+          appointmentId: appointment.id,
+          status: 'succeeded'
+        }
+      }) : null;
+
+      if (payment) {
+        const { processRefund } = await import('@/lib/actions/refunds');
+        await processRefund(
+          payment.id,
+          'admin_cancelled',
+          'Waitlist entry cancelled by admin'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to process refund for cancelled waitlist entry:', error);
+      // Don't fail the cancellation if refund fails
+    }
 
     // If this was a notified entry, notify the next person
     if (waitlistEntry.status === 'notified') {

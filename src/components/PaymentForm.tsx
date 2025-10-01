@@ -26,6 +26,10 @@ interface PaymentFormProps {
   onError?: (error: string) => void;
 }
 
+interface CheckoutFormProps extends PaymentFormProps {
+  clientSecret: string;
+}
+
 function CheckoutForm({
   appointmentId,
   amount,
@@ -33,37 +37,13 @@ function CheckoutForm({
   customerName,
   onSuccess,
   onError,
-}: PaymentFormProps) {
+  clientSecret,
+}: CheckoutFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Create payment intent when component mounts
-    const createIntent = async () => {
-      try {
-        const result = await createPaymentIntent(
-          appointmentId,
-          amount,
-          customerEmail,
-          customerName
-        );
-
-        if (result.success && result.clientSecret) {
-          setClientSecret(result.clientSecret);
-        } else {
-          setError(result.error || 'Failed to create payment intent');
-        }
-      } catch {
-        setError('Failed to initialize payment');
-      }
-    };
-
-    createIntent();
-  }, [appointmentId, amount, customerEmail, customerName]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -79,7 +59,7 @@ function CheckoutForm({
       const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/payment/success?payment_intent=${paymentIntent?.id}`,
+          return_url: `${window.location.origin}/payment/success`,
         },
         redirect: 'if_required',
       });
@@ -100,14 +80,6 @@ function CheckoutForm({
     }
   };
 
-  if (!clientSecret) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Initializing payment...</span>
-      </div>
-    );
-  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -147,17 +119,52 @@ function CheckoutForm({
 
 export default function PaymentForm(props: PaymentFormProps) {
   const [mounted, setMounted] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    
+    // Create payment intent when component mounts
+    const createIntent = async () => {
+      try {
+        const result = await createPaymentIntent(
+          props.appointmentId,
+          props.amount,
+          props.customerEmail,
+          props.customerName
+        );
 
-  if (!mounted) {
+        if (result.success && result.clientSecret) {
+          setClientSecret(result.clientSecret);
+        }
+      } catch (error) {
+        console.error('Failed to create payment intent:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    createIntent();
+  }, [props.appointmentId, props.amount, props.customerEmail, props.customerName]);
+
+  if (!mounted || isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-8 w-8 animate-spin" />
         <span className="ml-2">Loading payment form...</span>
       </div>
+    );
+  }
+
+  if (!clientSecret) {
+    return (
+      <Card className="w-full max-w-md mx-auto">
+        <CardContent className="p-8 text-center">
+          <XCircle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+          <p className="text-red-600">Failed to initialize payment. Please try again.</p>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -170,7 +177,7 @@ export default function PaymentForm(props: PaymentFormProps) {
         <Elements
           stripe={stripePromise}
           options={{
-            clientSecret: undefined, // Will be set by CheckoutForm
+            clientSecret,
             appearance: {
               theme: 'stripe',
               variables: {
@@ -179,7 +186,7 @@ export default function PaymentForm(props: PaymentFormProps) {
             },
           }}
         >
-          <CheckoutForm {...props} />
+          <CheckoutForm {...props} clientSecret={clientSecret} />
         </Elements>
       </CardContent>
     </Card>

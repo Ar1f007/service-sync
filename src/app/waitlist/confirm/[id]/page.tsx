@@ -1,7 +1,6 @@
+/** biome-ignore-all lint/style/useTemplate: <noneed> */
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'better-auth/react';
-import { auth } from '@/lib/auth';
 import { confirmWaitlistBooking, getWaitlistEntries } from '@/lib/actions/waitlist';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,15 +8,16 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format } from 'date-fns';
 import { CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import { getSession } from '@/lib/session';
 
 interface WaitlistConfirmPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 async function WaitlistConfirmContent({ waitlistId }: { waitlistId: string }) {
-  const session = await getServerSession({ auth });
+  const session = await getSession();
   
   if (!session?.user) {
     redirect('/sign-in');
@@ -43,7 +43,7 @@ async function WaitlistConfirmContent({ waitlistId }: { waitlistId: string }) {
     );
   }
 
-  const waitlistEntry = result.waitlistEntries.find(entry => entry.id === waitlistId);
+  const waitlistEntry = result.waitlistEntries?.find(entry => entry.id === waitlistId);
 
   if (!waitlistEntry) {
     return (
@@ -109,7 +109,7 @@ async function WaitlistConfirmContent({ waitlistId }: { waitlistId: string }) {
     
     const result = await confirmWaitlistBooking(waitlistId);
     
-    if (result.success) {
+    if (result.success && result.appointment) {
       redirect('/payment/success?appointment_id=' + result.appointment.id);
     } else {
       redirect('/waitlist/confirm/' + waitlistId + '?error=' + encodeURIComponent(result.error || 'Confirmation failed'));
@@ -201,14 +201,16 @@ async function WaitlistConfirmContent({ waitlistId }: { waitlistId: string }) {
   );
 }
 
-export default function WaitlistConfirmPage({ params }: WaitlistConfirmPageProps) {
+export default async function WaitlistConfirmPage({ params }: WaitlistConfirmPageProps) {
+  const { id } = await params;
+  
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     }>
-      <WaitlistConfirmContent waitlistId={params.id} />
+      <WaitlistConfirmContent waitlistId={id} />
     </Suspense>
   );
 }

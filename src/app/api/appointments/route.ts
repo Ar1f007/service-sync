@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   const timezone = searchParams.get("timezone") || "Europe/London";
 
   try {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (session.user.role === "staff") {
       const employee = await prismaInstance.employee.findFirst({
         where: { userId: session.user.id },
@@ -156,31 +156,36 @@ export async function POST(request: Request) {
     const totalPrice = requestedTotalPrice !== undefined ? requestedTotalPrice : calculatedTotalPrice;
     const totalDuration = service.duration + addonDuration;
 
-    // Conflict check
+    // Overbooking check - allow conflicts but determine status
     const start = fromZonedTime(new Date(dateTime), timezone);
     const end = new Date(start.getTime() + totalDuration * 60 * 1000);
-    const conflicting = await prismaInstance.appointment.findFirst({
+    const conflictingAppointments = await prismaInstance.appointment.findMany({
       where: {
         employeeId,
         dateTime: {
           gte: start,
           lt: end,
         },
+        status: { in: ['confirmed', 'pending'] }, // Only count active appointments
       },
     });
-    if (conflicting) {
-      return NextResponse.json({ error: "Time slot unavailable" }, { status: 409 });
+    
+    // Determine appointment status based on conflicts
+    let appointmentStatus = status;
+    if (conflictingAppointments.length > 0) {
+      // If there are conflicts, put this appointment on waitlist
+      appointmentStatus = 'waitlist';
     }
 
     // Create appointment with add-ons in a transaction
-    const appointment = await prismaInstance.$transaction(async (tx) => {
+    const result = await prismaInstance.$transaction(async (tx) => {
       const newAppointment = await tx.appointment.create({
         data: {
           serviceId,
           employeeId,
           clientId,
           dateTime: start,
-          status: status || "pending",
+          status: appointmentStatus,
           totalPrice,
         },
         include: {
@@ -200,8 +205,43 @@ export async function POST(request: Request) {
         });
       }
 
-      return newAppointment;
+      // Create waitlist entry if appointment is on waitlist
+      let waitlistEntry = null;
+      if (appointmentStatus === 'waitlist') {
+        // Get current position in queue
+        const currentPosition = await tx.waitlist.count({
+          where: {
+            serviceId,
+            employeeId,
+            requestedDateTime: start,
+            status: { in: ['waiting', 'notified'] },
+          },
+        });
+
+        // Set expiration time (7 days from now)
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        waitlistEntry = await tx.waitlist.create({
+          data: {
+            clientId,
+            serviceId,
+            employeeId,
+            requestedDateTime: start,
+            duration: totalDuration,
+            position: currentPosition + 1,
+            expiresAt,
+            selectedAddonIds: addonIds,
+            totalPrice,
+          },
+        });
+      }
+
+      return { appointment: newAppointment, waitlistEntry };
     });
+
+    const appointment = result.appointment;
+    const waitlistEntry = result.waitlistEntry;
 
     // Add add-ons information to the appointment object for email sending
     const appointmentWithAddons = {
@@ -255,13 +295,24 @@ export async function POST(request: Request) {
             price: addon.price,
             duration: addon.duration,
           })),
-        }
+        },
+        waitlist: appointmentStatus === 'waitlist',
+        waitlistEntry: waitlistEntry ? {
+          id: waitlistEntry.id,
+          position: waitlistEntry.position,
+          expiresAt: waitlistEntry.expiresAt,
+        } : null,
+        message: appointmentStatus === 'waitlist' 
+          ? 'Time slot is full. You have been added to the waitlist.' 
+          : 'Appointment booked successfully'
       },
       { status: 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to create appointment:", error);
-    return NextResponse.json({ error: error.message || "Failed to create appointment" }, { status: 500 });
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : "Failed to create appointment" 
+    }, { status: 500 });
   } finally {
     // await prismaInstance.$disconnect();
   }
