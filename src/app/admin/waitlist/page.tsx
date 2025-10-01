@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { Clock, Users, RefreshCw, Eye, CheckCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import WaitlistCleanupButton from '@/components/WaitlistCleanupButton';
 
 async function WaitlistContent() {
   const session = await getServerSession({ auth });
@@ -70,10 +71,13 @@ async function WaitlistContent() {
           <h1 className="text-3xl font-bold">Waitlist Management</h1>
           <p className="text-gray-600">Manage customer waitlist entries and notifications</p>
         </div>
-        <Button variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          <WaitlistCleanupButton />
+          <Button variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}

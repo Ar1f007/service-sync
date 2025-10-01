@@ -35,8 +35,9 @@ A modern, full-stack appointment booking platform built with Next.js, TypeScript
   - Real-time notifications when slots become available
   - Position tracking and queue management
   - Automatic booking conversion with time limits
-  - Admin waitlist management interface
+  - Admin waitlist management interface with cleanup tools
   - Email notifications for waitlist updates
+  - Automated daily cleanup of expired entries
 - **Customer Risk Assessment**: Advanced risk management system ✅ COMPLETED
   - Weighted risk scoring algorithm (5 behavioral factors)
   - Real-time risk calculation and updates

@@ -36,6 +36,11 @@ BETTER_AUTH_SECRET="your_better_auth_secret_here"
 BETTER_AUTH_URL="http://localhost:3000"
 ```
 
+### Cron Jobs (Optional)
+```bash
+CRON_SECRET="your_cron_secret_here"
+```
+
 ### Redis (for caching)
 ```bash
 REDIS_URL="redis://localhost:6379"
@@ -82,6 +87,9 @@ STRIPE_WEBHOOK_SECRET="whsec_your_stripe_webhook_secret_here"
 # Better Auth
 BETTER_AUTH_SECRET="your-secret-key-here"
 BETTER_AUTH_URL="http://localhost:3000"
+
+# Cron Jobs (Optional)
+CRON_SECRET="your-cron-secret-here"
 ```
 
 ## Notes
