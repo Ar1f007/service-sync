@@ -44,6 +44,7 @@ export default function Navbar() {
 		{ href: "/admin/employees", label: "Manage Staff", admin: true },
 		{ href: "/admin/all-appointments", label: "All Appointments", admin: true },
 		{ href: "/admin/payments", label: "Payment Management", admin: true },
+		{ href: "/admin/waitlist", label: "Waitlist Management", admin: true },
 		{ href: "/admin/risk-assessment", label: "Risk Assessment", admin: true },
 		{ href: "/admin/emails", label: "Email Management", admin: true },
 	];

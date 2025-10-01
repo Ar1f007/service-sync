@@ -11,7 +11,8 @@
     "db:push": "pnpm exec prisma db push",
     "db:generate": "pnpx prisma generate",
     "emails:process": "node src/scripts/process-emails.js",
-    "risk:init": "node src/scripts/init-risk-assessments.js"
+    "risk:init": "node src/scripts/init-risk-assessments.js",
+    "waitlist:cleanup": "node src/scripts/cleanup-waitlist.js"
   },
   "type": "module",
   "dependencies": {

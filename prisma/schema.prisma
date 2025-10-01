@@ -30,6 +30,7 @@ model User {
   services     Service[]  @relation("ServiceCreator")
   employeeInfo Employee[] @relation("EmployeeUser")
   customerRisk CustomerRisk? @relation("CustomerRisk")
+  waitlistEntries Waitlist[] @relation("WaitlistClient")
   @@map("user")
 }
 
@@ -90,6 +91,7 @@ model Service {
   serviceEmployees ServiceEmployee[] // Explicit join collection
   appointments Appointment[]   @relation("ServiceAppointments")
   addons      ServiceAddon[]  @relation("ServiceAddons")
+  waitlistEntries Waitlist[] @relation("WaitlistService")
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -102,6 +104,7 @@ model Employee {
   user        User            @relation("EmployeeUser", fields: [userId], references: [id])
   serviceEmployees ServiceEmployee[] // Explicit join collection
   appointments Appointment[]   @relation("EmployeeAppointments")
+  waitlistEntries Waitlist[] @relation("WaitlistEmployee")
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -258,5 +261,48 @@ model Payment {
   paidAt            DateTime?
   
   @@map("payment")
+}
+
+model Waitlist {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  clientId          String   @db.ObjectId
+  client            User     @relation("WaitlistClient", fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId         String   @db.ObjectId
+  service           Service  @relation("WaitlistService", fields: [serviceId], references: [id], onDelete: Cascade)
+  employeeId        String   @db.ObjectId
+  employee          Employee @relation("WaitlistEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Requested time slot
+  requestedDateTime DateTime
+  duration          Int      // Duration in minutes (service + add-ons)
+  
+  // Waitlist position and priority
+  position          Int      // Position in queue (1-based)
+  priority          Int      @default(0) // Higher number = higher priority
+  
+  // Status tracking
+  status            String   @default("waiting") // "waiting", "notified", "confirmed", "expired", "cancelled"
+  expiresAt         DateTime // When the waitlist entry expires
+  
+  // Notification tracking
+  notificationSentAt DateTime?
+  notificationExpiresAt DateTime? // When the notification expires (e.g., 15 minutes)
+  
+  // Selected add-ons (stored as JSON for flexibility)
+  selectedAddonIds  String[] @default([])
+  totalPrice        Float?   // Total price including add-ons
+  
+  // Conversion tracking
+  convertedToAppointmentId String? @db.ObjectId
+  convertedAt       DateTime?
+  
+  // Admin notes
+  adminNotes        String?
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("waitlist")
 }
 

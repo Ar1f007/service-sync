@@ -1,6 +1,8 @@
 import { Resend } from 'resend';
 import prismaInstance from './db';
 import { EMAIL_MAX_RETRY_ATTEMPTS, EMAIL_RETRY_DELAY } from './utils';
+import WaitlistNotificationEmail from '../emails/WaitlistNotification';
+import WaitlistConfirmationEmail from '../emails/WaitlistConfirmation';
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'dummy-key');
 
@@ -269,6 +271,22 @@ const emailTemplates: Record<string, EmailTemplate> = {
         <p>ServiceSync System</p>
       </div>
     `
+  },
+  waitlistNotification: {
+    name: 'waitlistNotification',
+    subject: 'Your Waitlist Slot is Available - ServiceSync',
+    render: (data) => {
+      const { render } = require('@react-email/render');
+      return render(WaitlistNotificationEmail(data));
+    }
+  },
+  waitlistConfirmation: {
+    name: 'waitlistConfirmation',
+    subject: 'Waitlist Booking Confirmed - ServiceSync',
+    render: (data) => {
+      const { render } = require('@react-email/render');
+      return render(WaitlistConfirmationEmail(data));
+    }
   }
 };
 
@@ -460,5 +478,76 @@ export async function sendAdminNotification(appointment: Appointment, customer: 
       // If immediate send fails, queue it for retry
       await queueEmail(emailData);
     }
+  }
+}
+
+// Waitlist notification email
+export async function sendWaitlistNotification(waitlistEntry: any) {
+  const { client, service, employee, requestedDateTime, position } = waitlistEntry;
+  
+  const confirmationUrl = `${process.env.NEXT_PUBLIC_APP_URL}/waitlist/confirm/${waitlistEntry.id}`;
+  
+  const emailData = {
+    to: client.email,
+    subject: 'Your Waitlist Slot is Available - ServiceSync',
+    template: 'waitlistNotification',
+    data: {
+      clientName: client.name || 'Valued Customer',
+      serviceName: service.title,
+      employeeName: employee.user.name || 'Our Staff',
+      requestedDateTime: requestedDateTime.toISOString(),
+      position,
+      confirmationUrl,
+      expiresInMinutes: 15,
+    },
+  };
+
+  // Try to send immediately, fallback to queue if fails
+  const sent = await sendEmail(emailData);
+  if (!sent) {
+    await queueEmail(emailData);
+  }
+}
+
+// Waitlist confirmation email
+export async function sendWaitlistConfirmation(waitlistEntry: any, appointment: any) {
+  const { client, service, employee, requestedDateTime, selectedAddonIds, totalPrice } = waitlistEntry;
+  
+  // Get addon details if any
+  let addons: any[] = [];
+  if (selectedAddonIds && selectedAddonIds.length > 0) {
+    const addonDetails = await prismaInstance.serviceAddon.findMany({
+      where: {
+        id: { in: selectedAddonIds },
+        serviceId: service.id,
+        isActive: true,
+      },
+      select: {
+        name: true,
+        price: true,
+      },
+    });
+    addons = addonDetails;
+  }
+  
+  const emailData = {
+    to: client.email,
+    subject: 'Waitlist Booking Confirmed - ServiceSync',
+    template: 'waitlistConfirmation',
+    data: {
+      clientName: client.name || 'Valued Customer',
+      serviceName: service.title,
+      employeeName: employee.user.name || 'Our Staff',
+      appointmentDateTime: requestedDateTime.toISOString(),
+      appointmentId: appointment.id,
+      totalPrice,
+      addons,
+    },
+  };
+
+  // Try to send immediately, fallback to queue if fails
+  const sent = await sendEmail(emailData);
+  if (!sent) {
+    await queueEmail(emailData);
   }
 }

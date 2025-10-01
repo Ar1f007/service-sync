@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import RiskIndicator, { RiskWarning } from "@/components/RiskIndicator";
+import WaitlistEnrollment from "@/components/WaitlistEnrollment";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -109,7 +110,7 @@ export default function BookClient({ services }: BookClientProps) {
 	const { data: session, isPending } = authClient.useSession();
 	const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
 	const [bookingStatus, setBookingStatus] = useState<
-		"idle" | "loading" | "success" | "error"
+		"idle" | "loading" | "success" | "error" | "waitlist"
 	>("idle");
 	const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
 	const [timeSlots, setTimeSlots] = useState<string[]>([]);
@@ -478,6 +479,13 @@ export default function BookClient({ services }: BookClientProps) {
 
 			if (!response.ok) {
 				const errorData = await response.json();
+				
+				// If it's a time slot conflict, show waitlist option instead of error
+				if (errorData.error === "Time slot unavailable") {
+					setBookingStatus("waitlist");
+					return;
+				}
+				
 				throw new Error(errorData.error || "Failed to book appointment");
 			}
 
@@ -642,6 +650,43 @@ export default function BookClient({ services }: BookClientProps) {
 								<p className="text-slate-600">
 									Your appointment has been successfully booked. Redirecting...
 								</p>
+							</div>
+						) : bookingStatus === "waitlist" ? (
+							<div className="py-6">
+								<WaitlistEnrollment
+									serviceId={form.getValues("serviceId")}
+									employeeId={form.getValues("employeeId")}
+									requestedDateTime={new Date(`${form.getValues("date")}T${form.getValues("time")}:00`)}
+									duration={selectedServiceData ? selectedServiceData.duration + (form.getValues("addonIds") || []).reduce((sum, addonId) => {
+										const addon = availableAddons.find(a => a.id === addonId);
+										return sum + (addon?.duration || 0);
+									}, 0) : 0}
+									selectedAddonIds={form.getValues("addonIds") || []}
+									totalPrice={totalPrice}
+									onSuccess={() => {
+										setBookingStatus("success");
+										setTimeout(() => {
+											setIsBookingDialogOpen(false);
+											setBookingStatus("idle");
+											router.push("/dashboard/appointments");
+										}, 2000);
+									}}
+									onError={(error) => {
+										form.setError("root", { message: error });
+										setBookingStatus("error");
+									}}
+								/>
+								<div className="flex justify-center mt-4">
+									<Button
+										variant="outline"
+										onClick={() => {
+											setIsBookingDialogOpen(false);
+											setBookingStatus("idle");
+										}}
+									>
+										Close
+									</Button>
+								</div>
 							</div>
 						) : (
 							<Form {...form}>
