@@ -447,6 +447,14 @@ export default function BookClient({ services }: BookClientProps) {
 				timezone,
 			).toISOString();
 
+			// Calculate total price including add-ons
+			let totalPrice = selectedService.price;
+			if (data.addonIds && data.addonIds.length > 0) {
+				const selectedAddons = addons.filter(addon => data.addonIds.includes(addon.id));
+				totalPrice += selectedAddons.reduce((sum, addon) => sum + addon.price, 0);
+			}
+
+			// Create appointment first (without payment)
 			const response = await fetch(
 				`/api/appointments?timezone=${encodeURIComponent(timezone)}`,
 				{
@@ -463,6 +471,7 @@ export default function BookClient({ services }: BookClientProps) {
 							: "pending",
 						timezone,
 						addonIds: data.addonIds,
+						totalPrice,
 					}),
 				},
 			);
@@ -472,13 +481,27 @@ export default function BookClient({ services }: BookClientProps) {
 				throw new Error(errorData.error || "Failed to book appointment");
 			}
 
-			setBookingStatus("success");
-			form.reset();
-			setTimeout(() => {
-				setIsBookingDialogOpen(false);
-				setBookingStatus("idle");
-				router.push("/dashboard/appointments");
-			}, 2000);
+			const appointmentData = await response.json();
+			
+			// If payment is required and customer doesn't require approval, redirect to payment
+			if (totalPrice > 0 && !customerRisk?.requiresApproval) {
+				setBookingStatus("success");
+				form.reset();
+				setTimeout(() => {
+					setIsBookingDialogOpen(false);
+					setBookingStatus("idle");
+					router.push(`/payment?appointmentId=${appointmentData.appointment.id}`);
+				}, 1000);
+			} else {
+				// No payment required or requires approval
+				setBookingStatus("success");
+				form.reset();
+				setTimeout(() => {
+					setIsBookingDialogOpen(false);
+					setBookingStatus("idle");
+					router.push("/dashboard/appointments");
+				}, 2000);
+			}
 		// biome-ignore lint/suspicious/noExplicitAny: <noneed>
 		} catch (error: any) {
 			setBookingStatus("error");

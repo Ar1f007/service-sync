@@ -19,14 +19,16 @@ RESEND_API_KEY="re_your_resend_api_key_here"
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```
 
-## Optional Variables (for future features)
+## Payment Processing (Required for payments)
 
-### Payment Processing (Stripe)
+### Stripe Configuration
 ```bash
 STRIPE_SECRET_KEY="sk_test_your_stripe_secret_key_here"
-STRIPE_PUBLISHABLE_KEY="pk_test_your_stripe_publishable_key_here"
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_your_stripe_publishable_key_here"
 STRIPE_WEBHOOK_SECRET="whsec_your_stripe_webhook_secret_here"
 ```
+
+## Optional Variables
 
 ### Better Auth Configuration
 ```bash
@@ -72,6 +74,11 @@ RESEND_API_KEY="re_1234567890abcdef"
 # Application
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
+# Payment Processing (Stripe)
+STRIPE_SECRET_KEY="sk_test_your_stripe_secret_key_here"
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_your_stripe_publishable_key_here"
+STRIPE_WEBHOOK_SECRET="whsec_your_stripe_webhook_secret_here"
+
 # Better Auth
 BETTER_AUTH_SECRET="your-secret-key-here"
 BETTER_AUTH_URL="http://localhost:3000"
@@ -80,5 +87,6 @@ BETTER_AUTH_URL="http://localhost:3000"
 ## Notes
 
 - The email system will work without the Resend API key (emails will be queued but not sent)
+- Payment processing requires all Stripe keys to be configured
 - All other features will work normally without the optional API keys
 - Make sure to restart your development server after adding environment variables

@@ -98,7 +98,8 @@ export async function POST(request: Request) {
       dateTime, 
       status = "pending", 
       timezone = "Europe/London",
-      addonIds = []
+      addonIds = [],
+      totalPrice: requestedTotalPrice
     } = await request.json();
 
     if (!serviceId || !employeeId || !clientId || !dateTime || !status) {
@@ -151,7 +152,8 @@ export async function POST(request: Request) {
     // Calculate total price and duration
     const addonPrice = addons.reduce((sum, addon) => sum + addon.price, 0);
     const addonDuration = addons.reduce((sum, addon) => sum + addon.duration, 0);
-    const totalPrice = service.price + addonPrice;
+    const calculatedTotalPrice = service.price + addonPrice;
+    const totalPrice = requestedTotalPrice !== undefined ? requestedTotalPrice : calculatedTotalPrice;
     const totalDuration = service.duration + addonDuration;
 
     // Conflict check
@@ -239,19 +241,21 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        id: appointment.id,
-        service: appointment.service,
-        client: appointment.client,
-        employee: appointment.employee,
-        dateTime: toZonedTime(appointment.dateTime, timezone).toISOString(),
-        status: appointment.status,
-        totalPrice: appointment.totalPrice,
-        addons: addons.map(addon => ({
-          id: addon.id,
-          name: addon.name,
-          price: addon.price,
-          duration: addon.duration,
-        })),
+        appointment: {
+          id: appointment.id,
+          service: appointment.service,
+          client: appointment.client,
+          employee: appointment.employee,
+          dateTime: toZonedTime(appointment.dateTime, timezone).toISOString(),
+          status: appointment.status,
+          totalPrice: appointment.totalPrice,
+          addons: addons.map(addon => ({
+            id: addon.id,
+            name: addon.name,
+            price: addon.price,
+            duration: addon.duration,
+          })),
+        }
       },
       { status: 201 }
     );
