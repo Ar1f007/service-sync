@@ -32,6 +32,7 @@ async function PaymentsContent() {
     );
   }
 
+  
   const payments = result.payments || [];
 
   const getStatusBadge = (status: string) => {

@@ -25,29 +25,40 @@ export default function Navbar() {
 	};
 
 	const isAdmin = session?.user?.role === "admin";
+	const isCustomer = session?.user?.role === "client";
 
 	// @ts-ignore
 	const isEmployee = session?.user?.role === "staff";
-	const navigationLinks = [
-		{ href: "/services", label: "Services", public: true },
-		{ href: "/book", label: "Book Appointment", auth: true },
-		{
-			href: "/dashboard/appointments", label: "My Appointments", auth: true
-		},
-		{
-			href: "/dashboard/employee",
-			label: "Employee Dashboard",
-			employee: true,
-		},
-		{ href: "/admin/services", label: "Manage Services", admin: true },
-		{ href: "/admin/addons", label: "Service Add-ons", admin: true },
-		{ href: "/admin/employees", label: "Manage Staff", admin: true },
-		{ href: "/admin/all-appointments", label: "All Appointments", admin: true },
-		{ href: "/admin/payments", label: "Payment Management", admin: true },
-		{ href: "/admin/waitlist", label: "Waitlist Management", admin: true },
-		{ href: "/admin/risk-assessment", label: "Risk Assessment", admin: true },
-		{ href: "/admin/emails", label: "Email Management", admin: true },
-	];
+
+	// Define navigation links based on user role
+	const getNavigationLinks = () => {
+		if (isAdmin) {
+			// Admin only sees Dashboard and user avatar
+			return [
+				{ href: "/admin", label: "Dashboard", admin: true, public: false, auth: false, employee: false }
+			];
+		} else if (isCustomer) {
+			// Customer sees: Services, Book Appointment, My Appointments, My Calendar
+			return [
+				{ href: "/services", label: "Services", public: true, auth: false, admin: false, employee: false },
+				{ href: "/book", label: "Book Appointment", auth: true, public: false, admin: false, employee: false },
+				{ href: "/my-appointments", label: "My Appointments", auth: true, public: false, admin: false, employee: false },
+				{ href: "/my-calendar", label: "My Calendar", auth: true, public: false, admin: false, employee: false }
+			];
+		} else if (isEmployee) {
+			// Employee sees their dashboard
+			return [
+				{ href: "/dashboard/employee", label: "Employee Dashboard", employee: true, public: false, auth: false, admin: false }
+			];
+		} else {
+			// Not logged in - only show public links
+			return [
+				{ href: "/services", label: "Services", public: true, auth: false, admin: false, employee: false }
+			];
+		}
+	};
+
+	const navigationLinks = getNavigationLinks();
 
 	const visibleLinks = navigationLinks.filter((link) => {
 		if (link.public) return true;

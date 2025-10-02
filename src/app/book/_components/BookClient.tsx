@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, isValid } from "date-fns";
+import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import {
 	AlertCircle,
@@ -10,15 +10,12 @@ import {
 	CheckCircle,
 	Clock,
 	Loader2,
-	User,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import RiskIndicator, { RiskWarning } from "@/components/RiskIndicator";
-import WaitlistEnrollment from "@/components/WaitlistEnrollment";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -77,22 +74,10 @@ interface Addon {
 	isActive: boolean;
 }
 
-interface Employee {
-	id: string;
-	user: { name: string; email: string };
-	serviceEmployees: { serviceId: string }[];
-}
 
-interface Appointment {
-	id: string;
-	employeeId: string;
-	dateTime: string;
-	duration: number;
-}
 
 export const bookingSchema = z.object({
 	serviceId: z.string().min(1, "Service is required"),
-	employeeId: z.string().min(1, "Employee is required"),
 	date: z.string().min(1, "Date is required"),
 	time: z.string().min(1, "Time is required"),
 	addonIds: z.array(z.string()).default([]),
@@ -112,7 +97,6 @@ export default function BookClient({ services }: BookClientProps) {
 	const [bookingStatus, setBookingStatus] = useState<
 		"idle" | "loading" | "success" | "error" | "waitlist"
 	>("idle");
-	const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
 	const [timeSlots, setTimeSlots] = useState<string[]>([]);
 	const [slotAvailability, setSlotAvailability] = useState<Record<string, { available: boolean; conflictCount: number; status: string }>>({});
 	const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false);
@@ -128,15 +112,6 @@ export default function BookClient({ services }: BookClientProps) {
 		totalDuration: number;
 	} | null>(null);
 	const [isLoadingPricing, setIsLoadingPricing] = useState(false);
-	const [customerRisk, setCustomerRisk] = useState<{
-		riskLevel: "low" | "medium" | "high" | "very_high";
-		riskScore: number;
-		requiresApproval: boolean;
-		depositRequired: boolean;
-		maxAdvanceBookingDays: number | null;
-		adminNotes: string | null;
-	} | null>(null);
-	const [isLoadingRisk, setIsLoadingRisk] = useState(false);
 	const timezone =
 		Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London";
 
@@ -144,7 +119,6 @@ export default function BookClient({ services }: BookClientProps) {
 		resolver: zodResolver(bookingSchema),
 		defaultValues: {
 			serviceId: "",
-			employeeId: "",
 			date: "",
 			time: "",
 			addonIds: [],
@@ -154,43 +128,21 @@ export default function BookClient({ services }: BookClientProps) {
 	const serviceId = form.watch("serviceId");
 	const selectedDate = form.watch("date");
 	const selectedTime = form.watch("time");
-	const employeeId = form.watch("employeeId");
 
 	// Get service from URL params
 	const serviceIdFromUrl = searchParams.get("service");
 
-	// biome-ignore lint/correctness/useExhaustiveDependencies: <noneed>
 	useEffect(() => {
 		if (isPending) return;
 		if (!session) {
 			const currentUrl = window.location.pathname + window.location.search;
-			localStorage.setItem("redirectAfterAuth", currentUrl);
+			if (typeof window !== "undefined") {
+				localStorage.setItem("redirectAfterAuth", currentUrl);
+			}
 			router.push("/sign-in");
-		} else {
-			// Fetch customer risk assessment when user is logged in
-			fetchCustomerRisk();
 		}
 	}, [session, isPending, router]);
 
-	// Fetch customer risk assessment
-	const fetchCustomerRisk = useCallback(async () => {
-		if (!session?.user?.id) return;
-
-		try {
-			setIsLoadingRisk(true);
-			const response = await fetch(
-				`/api/risk-assessment/check-approval?userId=${session.user.id}`,
-			);
-			if (response.ok) {
-				const data = await response.json();
-				setCustomerRisk(data.mitigation);
-			}
-		} catch (error) {
-			console.error("Error fetching customer risk:", error);
-		} finally {
-			setIsLoadingRisk(false);
-		}
-	}, [session?.user?.id]);
 
 	useEffect(() => {
 		if (serviceIdFromUrl) {
@@ -199,34 +151,7 @@ export default function BookClient({ services }: BookClientProps) {
 		}
 	}, [serviceIdFromUrl, form]);
 
-	// Fetch employees for selected service
-	useEffect(() => {
-		if (!serviceId) return;
-		async function fetchEmployees() {
-			try {
-				const response = await fetch(
-					`/api/employees?serviceId=${serviceId}&timezone=${encodeURIComponent(timezone)}`,
-					{
-						method: "GET",
-						headers: { "Content-Type": "application/json" },
-						credentials: "include",
-					},
-				);
-				if (!response.ok) throw new Error("Failed to fetch employees");
-				const data = await response.json();
-				setAvailableEmployees(data.employees || []);
-				if (data.employees?.length === 1) {
-					form.setValue("employeeId", data.employees[0].id);
-				} else {
-					form.setValue("employeeId", "");
-				}
-			} catch (error) {
-				console.error("Error fetching employees:", error);
-				setAvailableEmployees([]);
-			}
-		}
-		fetchEmployees();
-	}, [serviceId, form, timezone]);
+	// No need to fetch employees anymore - they're auto-assigned
 
 	// Fetch add-ons for selected service
 	useEffect(() => {
@@ -289,9 +214,9 @@ export default function BookClient({ services }: BookClientProps) {
 		calculatePricing();
 	}, [serviceId, selectedAddons]);
 
-	// Generate and filter time slots based on employee availability
+	// Generate and filter time slots based on service-wide availability
 	useEffect(() => {
-		if (!serviceId || !selectedDate || !employeeId) {
+		if (!serviceId || !selectedDate) {
 			setTimeSlots([]);
 			return;
 		}
@@ -310,21 +235,9 @@ export default function BookClient({ services }: BookClientProps) {
 					return;
 				}
 
-				// Generate time slots (9:00 AM to 5:30 PM, 30-min intervals)
-				const startHour = 9;
-				const endHour = 17.5; // 5:30 PM
-				const interval = 30; // minutes
-				const slots: string[] = [];
-				for (let hour = startHour; hour <= endHour; hour += interval / 60) {
-					const hours = Math.floor(hour);
-					const minutes = (hour % 1) * 60;
-					const time = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
-					slots.push(time);
-				}
-
-				// Fetch existing appointments for conflict checking
+				// Fetch availability from the new API
 				const response = await fetch(
-					`/api/appointments?employeeId=${employeeId}&date=${selectedDate}&timezone=${encodeURIComponent(timezone)}`,
+					`/api/availability?serviceId=${serviceId}&date=${selectedDate}&timezone=${encodeURIComponent(timezone)}&includeSuggestions=true`,
 					{
 						method: "GET",
 						headers: { "Content-Type": "application/json" },
@@ -332,61 +245,14 @@ export default function BookClient({ services }: BookClientProps) {
 					},
 				);
 
-				if (!response.ok) throw new Error("Failed to fetch appointments");
-				const { appointments }: { appointments: Appointment[] } =
-					await response.json();
+				if (!response.ok) throw new Error("Failed to fetch availability");
+				const data = await response.json();
 
-				// Show all time slots - conflicts will be handled during booking
-				const duration = pricingData?.totalDuration || selectedService.duration;
-				
-				// Create slot availability data
-				const slotsWithAvailability = slots.map((slot) => {
-					const slotDateTimeStr = `${selectedDate}T${slot}:00`;
-					const slotDate = new Date(slotDateTimeStr);
-					if (!isValid(slotDate)) {
-						return { slot, available: false, conflictCount: 0 };
-					}
-					
-					const slotStart = toZonedTime(slotDate, timezone);
-					const slotEnd = new Date(slotStart.getTime() + duration * 60 * 1000);
-
-					if (!isValid(slotStart) || !isValid(slotEnd)) {
-						return { slot, available: false, conflictCount: 0 };
-					}
-
-					// Count conflicts with existing appointments
-					const conflictCount = appointments.filter((appt) => {
-						const apptDate = new Date(appt.dateTime);
-						if (!isValid(apptDate)) return false;
-						
-						const apptStart = toZonedTime(apptDate, timezone);
-						const apptEnd = new Date(
-							apptStart.getTime() + (appt.duration || 30) * 60 * 1000,
-						);
-
-						if (!isValid(apptStart) || !isValid(apptEnd)) return false;
-
-						// Check for overlap
-						return (
-							(slotStart >= apptStart && slotStart < apptEnd) ||
-							(slotEnd > apptStart && slotEnd <= apptEnd) ||
-							(slotStart <= apptStart && slotEnd >= apptEnd)
-						);
-					}).length;
-
-					return {
-						slot,
-						available: conflictCount === 0,
-						conflictCount,
-						status: conflictCount === 0 ? 'available' : conflictCount === 1 ? 'waitlist' : 'full'
-					};
-				});
-
-				console.log(`Time slots for ${selectedDate}:`, slotsWithAvailability);
+				console.log(`Availability for ${selectedDate}:`, data);
 				
 				// Store slot availability data
 				const availabilityMap: Record<string, { available: boolean; conflictCount: number; status: string }> = {};
-				slotsWithAvailability.forEach(slotData => {
+				data.slots.forEach((slotData: { slot: string; available: boolean; conflictCount: number; status: string }) => {
 					availabilityMap[slotData.slot] = {
 						available: slotData.available,
 						conflictCount: slotData.conflictCount,
@@ -394,7 +260,7 @@ export default function BookClient({ services }: BookClientProps) {
 					};
 				});
 				setSlotAvailability(availabilityMap);
-				setTimeSlots(slotsWithAvailability.map(s => s.slot));
+				setTimeSlots(data.slots.map((s: { slot: string }) => s.slot));
 			} catch (error) {
 				console.error("Error fetching time slots:", error);
 				setTimeSlots([]);
@@ -403,12 +269,9 @@ export default function BookClient({ services }: BookClientProps) {
 			}
 		}
 		fetchTimeSlots();
-	}, [serviceId, selectedDate, employeeId, services, timezone, pricingData]);
+	}, [serviceId, selectedDate, services, timezone]);
 
 	const selectedServiceData = services.find((s) => s.id === serviceId);
-	const selectedEmployeeData = availableEmployees.find(
-		(e) => e.id === employeeId,
-	);
 
 	const onSubmit = async (data: BookingFormData) => {
 		setBookingStatus("loading");
@@ -417,27 +280,6 @@ export default function BookClient({ services }: BookClientProps) {
 			const selectedService = services.find((s) => s.id === data.serviceId);
 			if (!selectedService) throw new Error("Service not found");
 
-			// Check if customer requires approval
-			if (customerRisk?.requiresApproval) {
-				throw new Error(
-					"This booking requires manual approval. Please contact us to complete your booking.",
-				);
-			}
-
-			// Check advance booking limits
-			if (customerRisk?.maxAdvanceBookingDays) {
-				const bookingDate = new Date(data.date);
-				const today = new Date();
-				const daysDifference = Math.ceil(
-					(bookingDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-				);
-
-				if (daysDifference > customerRisk.maxAdvanceBookingDays) {
-					throw new Error(
-						`You can only book up to ${customerRisk.maxAdvanceBookingDays} days in advance. Please select an earlier date.`,
-					);
-				}
-			}
 
 			const dateTime = toZonedTime(
 				new Date(`${data.date}T${data.time}:00`),
@@ -460,12 +302,9 @@ export default function BookClient({ services }: BookClientProps) {
 					credentials: "include",
 					body: JSON.stringify({
 						serviceId: data.serviceId,
-						employeeId: data.employeeId,
 						clientId: session?.user?.id,
 						dateTime,
-						status: customerRisk?.requiresApproval
-							? "pending_approval"
-							: "pending",
+						status: "pending",
 						timezone,
 						addonIds: data.addonIds,
 						totalPrice,
@@ -486,8 +325,8 @@ export default function BookClient({ services }: BookClientProps) {
 				return;
 			}
 			
-			// If payment is required and customer doesn't require approval, redirect to payment
-			if (totalPrice > 0 && !customerRisk?.requiresApproval) {
+			// If payment is required, redirect to payment
+			if (totalPrice > 0) {
 				setBookingStatus("success");
 				form.reset();
 				setTimeout(() => {
@@ -496,7 +335,7 @@ export default function BookClient({ services }: BookClientProps) {
 					router.push(`/payment?appointmentId=${appointmentData.appointment.id}`);
 				}, 1000);
 			} else {
-				// No payment required or requires approval
+				// No payment required
 				setBookingStatus("success");
 				form.reset();
 				setTimeout(() => {
@@ -625,7 +464,7 @@ export default function BookClient({ services }: BookClientProps) {
 					open={isBookingDialogOpen}
 					onOpenChange={setIsBookingDialogOpen}
 				>
-					<DialogContent className="sm:max-w-md">
+					<DialogContent className="sm:max-w-md max-h-[90svh] overflow-y-auto">
 						<DialogHeader>
 							<DialogTitle className="flex items-center">
 								<CalendarIcon className="w-5 h-5 mr-2 text-teal-700" />
@@ -747,43 +586,7 @@ export default function BookClient({ services }: BookClientProps) {
 										)}
 									/>
 
-									{/* Staff Selection (hidden if only one employee) */}
-									{availableEmployees.length > 1 && (
-										<FormField
-											control={form.control}
-											name="employeeId"
-											render={({ field }) => (
-												<FormItem>
-													<FormLabel>Select Staff Member</FormLabel>
-													<Select
-														onValueChange={field.onChange}
-														value={field.value}
-														disabled={!serviceId}
-													>
-														<FormControl>
-															<SelectTrigger>
-																<SelectValue placeholder="Choose your preferred staff member" />
-															</SelectTrigger>
-														</FormControl>
-														<SelectContent>
-															{availableEmployees.map((employee) => (
-																<SelectItem
-																	key={employee.id}
-																	value={employee.id}
-																>
-																	<div className="flex items-center">
-																		<User className="w-4 h-4 mr-2" />
-																		{employee.user.name}
-																	</div>
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-													<FormMessage />
-												</FormItem>
-											)}
-										/>
-									)}
+									{/* Staff selection removed - auto-assigned */}
 
 									{/* Add-on Selection */}
 									{availableAddons.length > 0 && (
@@ -968,7 +771,6 @@ export default function BookClient({ services }: BookClientProps) {
 
 									{/* Booking Summary */}
 									{selectedServiceData &&
-										selectedEmployeeData &&
 										selectedDate &&
 										selectedTime && (
 											<div className="bg-slate-50 p-4 rounded-lg">
@@ -981,8 +783,7 @@ export default function BookClient({ services }: BookClientProps) {
 														{selectedServiceData.title}
 													</p>
 													<p>
-														<strong>Staff:</strong>{" "}
-														{selectedEmployeeData.user.name}
+														<strong>Staff:</strong> Best available technician
 													</p>
 													<p>
 														<strong>Date:</strong>{" "}
@@ -1049,39 +850,6 @@ export default function BookClient({ services }: BookClientProps) {
 											</div>
 										)}
 
-									{/* Risk Assessment Warning */}
-									{customerRisk &&
-										(customerRisk.requiresApproval ||
-											customerRisk.depositRequired ||
-											customerRisk.maxAdvanceBookingDays ||
-											customerRisk.adminNotes) && (
-											<RiskWarning
-												requiresApproval={customerRisk.requiresApproval}
-												depositRequired={customerRisk.depositRequired}
-												maxAdvanceBookingDays={
-													customerRisk.maxAdvanceBookingDays
-												}
-												adminNotes={customerRisk.adminNotes}
-											/>
-										)}
-
-									{/* Risk Level Indicator */}
-									{customerRisk && customerRisk.riskLevel !== "low" && (
-										<div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-											<div className="flex items-center space-x-2">
-												<span className="text-sm text-slate-600">
-													Your booking status:
-												</span>
-												<RiskIndicator
-													riskLevel={customerRisk.riskLevel}
-													riskScore={customerRisk.riskScore}
-												/>
-											</div>
-											{isLoadingRisk && (
-												<Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-											)}
-										</div>
-									)}
 
 									<div className="flex space-x-2 pt-4">
 										<Button
@@ -1141,7 +909,7 @@ export default function BookClient({ services }: BookClientProps) {
 				</Card>
 
 				{/* Waitlist Information */}
-				<Card className="bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200">
+				<Card className="mt-8 bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200">
 					<CardContent className="p-6">
 						<div className="flex items-start space-x-4">
 							<div className="flex-shrink-0">

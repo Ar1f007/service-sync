@@ -6,7 +6,7 @@ import { processRefund } from "@/lib/actions/refunds";
 import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
 
 type RouteContext = {
-  params: Promise<{ id: string }>;
+  params: Promise<{ appointmentId: string }>;
 };
 
 export async function POST(request: NextRequest, context: RouteContext) {
@@ -17,12 +17,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   try {
-    const { id } = await context.params;
+    const { appointmentId } = await context.params;
     const { cancellationReason, adminNotes } = await request.json();
 
     // Get appointment details
     const appointment = await prismaInstance.appointment.findUnique({
-      where: { id },
+      where: { id: appointmentId },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
         client: { select: { id: true, name: true, email: true } },
@@ -48,14 +48,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Appointment is already cancelled" }, { status: 400 });
     }
 
+    if (appointment.status === 'completed') {
+      return NextResponse.json({ error: "Cannot cancel completed appointment" }, { status: 400 });
+    }
+
     // Update appointment status
     const updatedAppointment = await prismaInstance.appointment.update({
-      where: { id },
+      where: { id: appointmentId },
       data: {
         status: 'cancelled',
         cancelledBy: session.user.id,
         cancelledByRole: session.user.role,
         cancellationReason: cancellationReason || 'Cancelled by customer',
+        updatedAt: new Date()
       },
     });
 
@@ -64,7 +69,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     try {
       const payment = await prismaInstance.payment.findFirst({
         where: {
-          appointmentId: id,
+          appointmentId: appointmentId,
           status: 'succeeded'
         }
       });
@@ -72,7 +77,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (payment) {
         refundResult = await processRefund(
           payment.id,
-          'client_cancelled',
+          session.user.role === 'client' ? 'client_cancelled' : 'admin_cancelled',
           adminNotes || cancellationReason || 'Cancelled by customer'
         );
 
@@ -97,7 +102,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Update customer risk assessment
     try {
-      await updateCustomerRiskOnAppointmentChange(id);
+      await updateCustomerRiskOnAppointmentChange(appointmentId);
     } catch (error) {
       console.error("Failed to update customer risk assessment:", error);
       // Don't fail the cancellation if risk assessment update fails

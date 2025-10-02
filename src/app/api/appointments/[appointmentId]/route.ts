@@ -1,4 +1,4 @@
-// api/appointments/[id]/route.ts
+// api/appointments/[appointmentId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { deleteAppointment, updateAppointment } from "@/lib/data/dashboard/appointments";
@@ -7,9 +7,8 @@ import prismaInstance from "@/lib/db";
 import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
 import { processRefund } from "@/lib/actions/refunds";
 
-
 type RouteContext = {
-  params: Promise<{ id: string }>;
+  params: Promise<{ appointmentId: string }>;
 };
 
 export async function PUT(request: NextRequest, context: RouteContext) { 
@@ -20,15 +19,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   }
 
   try {
-  
-    const { id } = await context.params;
+    const { appointmentId } = await context.params;
     const { searchParams } = new URL(request.url);
     const timezone = searchParams.get("timezone") || "Europe/London";
     const updateData = await request.json(); // Get the raw JSON body
 
     // Get appointment details before updating for email notifications
     const appointment = await prismaInstance.appointment.findUnique({
-      where: { id },
+      where: { id: appointmentId },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
         client: { select: { id: true, name: true, email: true } },
@@ -52,14 +50,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       updateData.cancellationReason = updateData.cancellationReason || 'Cancelled by admin';
     }
 
-    const updatedAppointment = await updateAppointment(id, updateData, timezone);
+    const updatedAppointment = await updateAppointment(appointmentId, updateData, timezone);
 
     // Process refund if appointment is cancelled and has a successful payment
     if (updateData.status === 'cancelled' && appointment.status !== 'cancelled') {
       try {
         const payment = await prismaInstance.payment.findFirst({
           where: {
-            appointmentId: id,
+            appointmentId: appointmentId,
             status: 'succeeded'
           }
         });
@@ -113,7 +111,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     // Update customer risk assessment
     try {
-      await updateCustomerRiskOnAppointmentChange(id);
+      await updateCustomerRiskOnAppointmentChange(appointmentId);
     } catch (error) {
       console.error("Failed to update customer risk assessment:", error);
       // Don't fail the update if risk assessment update fails
@@ -144,11 +142,11 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   try {
     // Await the params since it's now a Promise
-    const { id } = await context.params;
+    const { appointmentId } = await context.params;
     
     // Get appointment details before deleting for email notifications
     const appointment = await prismaInstance.appointment.findUnique({
-      where: { id },
+      where: { id: appointmentId },
       include: {
         service: { select: { id: true, title: true, price: true, duration: true } },
         client: { select: { id: true, name: true, email: true } },
@@ -160,7 +158,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
     }
 
-    await deleteAppointment(id); // Use the new delete function
+    await deleteAppointment(appointmentId); // Use the new delete function
 
     // Send cancellation email
     try {
@@ -172,7 +170,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
     // Update customer risk assessment
     try {
-      await updateCustomerRiskOnAppointmentChange(id);
+      await updateCustomerRiskOnAppointmentChange(appointmentId);
     } catch (error) {
       console.error("Failed to update customer risk assessment:", error);
       // Don't fail the deletion if risk assessment update fails

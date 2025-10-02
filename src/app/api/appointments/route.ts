@@ -4,6 +4,7 @@ import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import prismaInstance from "@/lib/db";
 import { sendBookingSubmitted,  sendAdminNotification } from "@/lib/email";
 import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
+import { recommendEmployee } from "@/lib/recommendation/workload";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -27,11 +28,8 @@ export async function GET(request: Request) {
       if (!employee) return NextResponse.json({ appointments: [] });
       where.employeeId = employee.id;
     } else if (session.user.role === "client") {
-      // Clients must provide employeeId and date for booking
-      if (!employeeId || !date) {
-        return NextResponse.json({ error: "employeeId and date are required for clients" }, { status: 400 });
-      }
-      where.employeeId = employeeId;
+      // For clients, filter by their own appointments
+      where.clientId = session.user.id;
     } else if (employeeId) {
       // Admins can optionally filter by employeeId
       where.employeeId = employeeId;
@@ -102,8 +100,51 @@ export async function POST(request: Request) {
       totalPrice: requestedTotalPrice
     } = await request.json();
 
-    if (!serviceId || !employeeId || !clientId || !dateTime || !status) {
+    if (!serviceId || !clientId || !dateTime || !status) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Auto-assign employee if not provided (for clients)
+    let assignedEmployeeId = employeeId;
+    if (!assignedEmployeeId && session.user.role === "client") {
+      // Calculate total duration including add-ons
+      const addons = addonIds.length > 0 ? await prismaInstance.serviceAddon.findMany({
+        where: {
+          id: { in: addonIds },
+          serviceId,
+          isActive: true,
+        },
+      }) : [];
+      
+      const service = await prismaInstance.service.findUnique({
+        where: { id: serviceId },
+        select: { duration: true },
+      });
+      
+      if (!service) {
+        return NextResponse.json({ error: "Service not found" }, { status: 404 });
+      }
+      
+      const addonDuration = addons.reduce((sum, addon) => sum + addon.duration, 0);
+      const totalDuration = service.duration + addonDuration;
+      
+      // Get recommended employee
+      const recommendation = await recommendEmployee({
+        serviceId,
+        dateTime: new Date(dateTime),
+        duration: totalDuration,
+        timezone,
+      });
+      
+      if (!recommendation) {
+        return NextResponse.json({ 
+          error: "No qualified staff available for this service" 
+        }, { status: 400 });
+      }
+      
+      assignedEmployeeId = recommendation.employeeId;
+    } else if (!assignedEmployeeId) {
+      return NextResponse.json({ error: "employeeId is required for admin/staff bookings" }, { status: 400 });
     }
 
     // Ensure clients can only book for themselves
@@ -122,11 +163,11 @@ export async function POST(request: Request) {
         select: { id: true, name: true },
       }),
       prismaInstance.employee.findUnique({
-        where: { id: employeeId },
+        where: { id: assignedEmployeeId },
         include: { user: { select: { id: true, name: true } } },
       }),
       prismaInstance.serviceEmployee.findFirst({
-        where: { serviceId, employeeId },
+        where: { serviceId, employeeId: assignedEmployeeId },
       }),
       addonIds.length > 0 ? prismaInstance.serviceAddon.findMany({
         where: {
@@ -161,7 +202,7 @@ export async function POST(request: Request) {
     const end = new Date(start.getTime() + totalDuration * 60 * 1000);
     const conflictingAppointments = await prismaInstance.appointment.findMany({
       where: {
-        employeeId,
+        employeeId: assignedEmployeeId,
         dateTime: {
           gte: start,
           lt: end,
@@ -182,7 +223,7 @@ export async function POST(request: Request) {
       const newAppointment = await tx.appointment.create({
         data: {
           serviceId,
-          employeeId,
+          employeeId: assignedEmployeeId,
           clientId,
           dateTime: start,
           status: appointmentStatus,
@@ -226,7 +267,7 @@ export async function POST(request: Request) {
           data: {
             clientId,
             serviceId,
-            employeeId,
+            employeeId: assignedEmployeeId,
             requestedDateTime: start,
             duration: totalDuration,
             position: currentPosition + 1,

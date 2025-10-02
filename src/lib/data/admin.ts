@@ -29,7 +29,12 @@ interface Appointment {
   appointmentAddons?: { addon: { id: string; name: string; price: number; duration: number } }[];
 }
 
-export async function getAppointments(userId: string, role: string): Promise<Appointment[]> {
+export async function getAppointments(
+  userId: string, 
+  role: string, 
+  page: number = 1, 
+  limit: number = 20
+): Promise<{ appointments: Appointment[]; total: number; totalPages: number }> {
   try {
     // biome-ignore lint/suspicious/noExplicitAny: noneed
     const where: any = {};
@@ -46,12 +51,22 @@ export async function getAppointments(userId: string, role: string): Promise<App
       if (employee) {
         where.employeeId = employee.id;
       } else {
-        return [];
+        return { appointments: [], total: 0, totalPages: 0 };
       }
     } else {
       // For other roles (e.g., client), no appointments
-      return [];
+      return { appointments: [], total: 0, totalPages: 0 };
     }
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination
+    const total = await prismaInstance.appointment.count({
+      where: {
+        ...where,
+      },
+    });
 
     const appointments = await prismaInstance.appointment.findMany({
       where: {
@@ -67,12 +82,17 @@ export async function getAppointments(userId: string, role: string): Promise<App
           },
         },
       },
+      orderBy: {
+        dateTime: 'desc', // Latest appointments first
+      },
+      skip,
+      take: limit,
     });
 
-    // Filter out appointments with null clientId (MongoDB Prisma limitation)
-    const validAppointments = appointments.filter(appt => appt.clientId !== null);
+    // All appointments are valid since clientId is required in schema
+    const validAppointments = appointments;
 
-    return validAppointments.map((appt) => ({
+    const processedAppointments = validAppointments.map((appt) => ({
       id: appt.id,
       service: appt.service,
       client: appt.client,
@@ -92,9 +112,17 @@ export async function getAppointments(userId: string, role: string): Promise<App
       cancellationReason: appt.cancellationReason || undefined,
       appointmentAddons: appt.appointmentAddons,
     }));
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      appointments: processedAppointments,
+      total,
+      totalPages,
+    };
   } catch (error) {
     console.error("Failed to fetch appointments:", error);
-    return [];
+    return { appointments: [], total: 0, totalPages: 0 };
   }
 }
 

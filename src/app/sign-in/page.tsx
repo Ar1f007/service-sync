@@ -32,12 +32,14 @@ export default function AuthForm() {
   const [activeTab, setActiveTab] = useState("signin")
 
   // Get redirect URL from search params or localStorage
-  const redirectUrl = searchParams.get("redirect") || localStorage.getItem("redirectAfterAuth") || "/"
+  const redirectUrl = searchParams.get("redirect") || (typeof window !== "undefined" ? localStorage.getItem("redirectAfterAuth") : null) || "/"
 
   useEffect(() => {
     // Clear the stored redirect URL when component mounts
     return () => {
-      localStorage.removeItem("redirectAfterAuth")
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("redirectAfterAuth")
+      }
     }
   }, [])
 
@@ -64,7 +66,9 @@ export default function AuthForm() {
         onSuccess: () => {
           setIsLoading(false)
           setSuccess("Welcome back! Redirecting...")
-          localStorage.removeItem("redirectAfterAuth")
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("redirectAfterAuth")
+          }
           setTimeout(() => {
             window.location.href = redirectUrl
           }, 1500)
@@ -101,7 +105,9 @@ export default function AuthForm() {
         onSuccess: () => {
           setIsLoading(false)
           setSuccess("Account created successfully! Redirecting...")
-          localStorage.removeItem("redirectAfterAuth")
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("redirectAfterAuth")
+          }
           setTimeout(() => {
             window.location.href = redirectUrl
           }, 2000)

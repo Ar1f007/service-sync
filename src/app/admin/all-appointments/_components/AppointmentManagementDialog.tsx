@@ -26,10 +26,17 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
 	deleteAppointment,
 	updateAppointmentStatus,
 } from "@/lib/actions/appointments";
-import { updateCustomerRiskOnAppointmentChange } from "@/lib/risk-updater";
+// Removed direct import of risk-updater to avoid browser PrismaClient error
 import { formatPrice } from "@/lib/utils";
 
 interface Appointment {
@@ -65,6 +72,14 @@ interface CustomerRisk {
 	lastCalculatedAt: string;
 }
 
+interface Employee {
+	id: string;
+	user: {
+		name: string | null;
+		email: string;
+	};
+}
+
 interface AppointmentManagementDialogProps {
 	appointment: Appointment | null;
 	isOpen: boolean;
@@ -84,6 +99,8 @@ export default function AppointmentManagementDialog({
 	const [error, setError] = useState<string | null>(null);
 	const [cancellationReason, setCancellationReason] = useState("");
 	const [showCancellationForm, setShowCancellationForm] = useState(false);
+	const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
+	const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
 
 	const fetchCustomerRisk = useCallback(async () => {
 		if (!appointment) return;
@@ -104,12 +121,31 @@ export default function AppointmentManagementDialog({
 		}
 	}, [appointment]);
 
-	// Fetch customer risk data when appointment changes
+	const fetchAvailableEmployees = useCallback(async () => {
+		if (!appointment) return;
+
+		try {
+			const response = await fetch(
+				`/api/employees?serviceId=${appointment.service.id}`,
+			);
+			if (response.ok) {
+				const data = await response.json();
+				setAvailableEmployees(data.employees || []);
+				// Set current employee as default selection
+				setSelectedEmployeeId(appointment.employee.id);
+			}
+		} catch (error) {
+			console.error("Failed to fetch available employees:", error);
+		}
+	}, [appointment]);
+
+	// Fetch customer risk data and available employees when appointment changes
 	useEffect(() => {
 		if (appointment && isOpen) {
 			fetchCustomerRisk();
+			fetchAvailableEmployees();
 		}
-	}, [appointment, isOpen, fetchCustomerRisk]);
+	}, [appointment, isOpen, fetchCustomerRisk, fetchAvailableEmployees]);
 
 	const handleStatusUpdate = async (newStatus: string) => {
 		if (!appointment) return;
@@ -124,13 +160,6 @@ export default function AppointmentManagementDialog({
 			}
 
 			await updateAppointmentStatus(appointment.id, newStatus);
-			
-			// Update customer risk assessment
-			try {
-				await updateCustomerRiskOnAppointmentChange(appointment.id);
-			} catch (error) {
-				console.error('Failed to update customer risk assessment:', error);
-			}
 			
 			// Refresh risk data in dialog
 			await fetchCustomerRisk();
@@ -157,13 +186,6 @@ export default function AppointmentManagementDialog({
 				"cancelled",
 				cancellationReason,
 			);
-			
-			// Update customer risk assessment
-			try {
-				await updateCustomerRiskOnAppointmentChange(appointment.id);
-			} catch (error) {
-				console.error('Failed to update customer risk assessment:', error);
-			}
 			
 			// Refresh risk data in dialog
 			await fetchCustomerRisk();
@@ -198,6 +220,37 @@ export default function AppointmentManagementDialog({
 		} catch (err: unknown) {
 			setError(
 				err instanceof Error ? err.message : "Failed to delete appointment",
+			);
+		} finally {
+			setIsUpdating(false);
+		}
+	};
+
+	const handleEmployeeChange = async (newEmployeeId: string) => {
+		if (!appointment || newEmployeeId === appointment.employee.id) return;
+
+		try {
+			setIsUpdating(true);
+			setError(null);
+
+			const response = await fetch(`/api/appointments/${appointment.id}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				credentials: "include",
+				body: JSON.stringify({ employeeId: newEmployeeId }),
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json();
+				throw new Error(errorData.error || "Failed to update employee assignment");
+			}
+
+			setSelectedEmployeeId(newEmployeeId);
+			// Refresh the page to update the appointment data
+			window.location.reload();
+		} catch (err: unknown) {
+			setError(
+				err instanceof Error ? err.message : "Failed to update employee assignment",
 			);
 		} finally {
 			setIsUpdating(false);
@@ -281,9 +334,22 @@ export default function AppointmentManagementDialog({
 								</div>
 								<div>
 									<Label className="text-gray-500">Staff</Label>
-									<p className="font-medium">
-										{appointment.employee.user.name}
-									</p>
+									<Select
+										value={selectedEmployeeId}
+										onValueChange={handleEmployeeChange}
+										disabled={isUpdating}
+									>
+										<SelectTrigger className="w-full">
+											<SelectValue placeholder="Select technician" />
+										</SelectTrigger>
+										<SelectContent>
+											{availableEmployees.map((employee) => (
+												<SelectItem key={employee.id} value={employee.id}>
+													{employee.user.name || "Unknown"}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
 								</div>
 								<div>
 									<Label className="text-gray-500">Date & Time</Label>

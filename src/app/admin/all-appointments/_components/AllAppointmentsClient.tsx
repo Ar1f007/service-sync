@@ -64,21 +64,34 @@ interface Appointment {
 
 interface AllAppointmentsClientProps {
 	initialAppointments: Appointment[];
+	initialTotal: number;
+	initialTotalPages: number;
+	initialPage: number;
+	initialLimit: number;
 	userRole: string;
 }
 
 export default function AllAppointmentsClient({
 	initialAppointments,
+	initialTotal,
+	initialTotalPages,
+	initialPage,
+	initialLimit,
 }: AllAppointmentsClientProps) {
 	const router = useRouter();
 	const { data: session, isPending } = authClient.useSession();
 	const [appointments, setAppointments] =
 		useState<Appointment[]>(initialAppointments);
+	const [total, setTotal] = useState(initialTotal);
+	const [totalPages, setTotalPages] = useState(initialTotalPages);
+	const [currentPage, setCurrentPage] = useState(initialPage);
+	const [limit, setLimit] = useState(initialLimit);
 	const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [selectedAppointment, setSelectedAppointment] =
 		useState<Appointment | null>(null);
 	const [isManagementDialogOpen, setIsManagementDialogOpen] = useState(false);
+	const [isLoading, setIsLoading] = useState(false);
 	const timezone =
 		Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London";
 
@@ -88,6 +101,47 @@ export default function AllAppointmentsClient({
 			router.push("/sign-in");
 		}
 	}, [session, isPending, router]);
+
+	const fetchAppointments = async (page: number, pageLimit: number) => {
+		try {
+			setIsLoading(true);
+			const response = await fetch(
+				`/api/admin/appointments?page=${page}&limit=${pageLimit}`,
+				{
+					credentials: "include",
+				}
+			);
+
+			if (!response.ok) {
+				throw new Error("Failed to fetch appointments");
+			}
+
+			const data = await response.json();
+			setAppointments(data.appointments);
+			setTotal(data.total);
+			setTotalPages(data.totalPages);
+			setCurrentPage(page);
+			setLimit(pageLimit);
+		} catch (err: unknown) {
+			setError(
+				err instanceof Error
+					? err.message
+					: "Failed to fetch appointments",
+			);
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	const handlePageChange = (newPage: number) => {
+		if (newPage >= 1 && newPage <= totalPages) {
+			fetchAppointments(newPage, limit);
+		}
+	};
+
+	const handleLimitChange = (newLimit: number) => {
+		fetchAppointments(1, newLimit);
+	};
 
 	const handleStatusChange = async (
 		appointmentId: string,
@@ -417,6 +471,77 @@ export default function AllAppointmentsClient({
 							)}
 						</CardContent>
 					</Card>
+
+					{/* Pagination Controls */}
+					{!selectedDate && (
+						<div className="flex items-center justify-between mt-6">
+							<div className="flex items-center space-x-2">
+								<p className="text-sm text-gray-700">
+									Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, total)} of {total} appointments
+								</p>
+								<Select value={limit.toString()} onValueChange={(value) => handleLimitChange(parseInt(value))}>
+									<SelectTrigger className="w-20">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="10">10</SelectItem>
+										<SelectItem value="20">20</SelectItem>
+										<SelectItem value="50">50</SelectItem>
+										<SelectItem value="100">100</SelectItem>
+									</SelectContent>
+								</Select>
+								<p className="text-sm text-gray-700">per page</p>
+							</div>
+
+							<div className="flex items-center space-x-2">
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => handlePageChange(currentPage - 1)}
+									disabled={currentPage <= 1 || isLoading}
+								>
+									Previous
+								</Button>
+								
+								<div className="flex items-center space-x-1">
+									{Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+										let pageNum: number;
+										if (totalPages <= 5) {
+											pageNum = i + 1;
+										} else if (currentPage <= 3) {
+											pageNum = i + 1;
+										} else if (currentPage >= totalPages - 2) {
+											pageNum = totalPages - 4 + i;
+										} else {
+											pageNum = currentPage - 2 + i;
+										}
+										
+										return (
+											<Button
+												key={pageNum}
+												variant={currentPage === pageNum ? "default" : "outline"}
+												size="sm"
+												onClick={() => handlePageChange(pageNum)}
+												disabled={isLoading}
+												className="w-8 h-8 p-0"
+											>
+												{pageNum}
+											</Button>
+										);
+									})}
+								</div>
+
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => handlePageChange(currentPage + 1)}
+									disabled={currentPage >= totalPages || isLoading}
+								>
+									Next
+								</Button>
+							</div>
+						</div>
+					)}
 				</div>
 			</div>
 

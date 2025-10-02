@@ -3,6 +3,7 @@ import { nextCookies } from "better-auth/next-js";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { ObjectId } from "mongodb"
 import prismaInstance from "./db";
+import { sendEmail } from "./email";
 
 
 export const auth = betterAuth({
@@ -10,7 +11,18 @@ export const auth = betterAuth({
     provider: "mongodb",
   }),
   emailAndPassword: {
-    enabled: true,    
+    enabled: true,
+    sendResetPassword: async ({ user, url, token }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Reset your password - ServiceSync",
+        template: "passwordReset",
+        data: { user, url, token },
+      });
+    },
+    onPasswordReset: async ({ user }) => {
+      console.log(`Password for user ${user.email} has been reset.`);
+    },
   },
   user: {
     additionalFields: {

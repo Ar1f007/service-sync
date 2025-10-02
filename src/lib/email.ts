@@ -45,15 +45,18 @@ export interface EmailData {
   subject: string;
   template: string;
   data: {
-    appointment: Appointment;
-    customer: Customer;
+    appointment?: Appointment;
+    customer?: Customer;
+    user?: { email: string; name: string | null };
+    url?: string;
+    token?: string;
   };
 }
 
 export interface EmailTemplate {
   name: string;
   subject: string;
-  render: (data: { appointment: Appointment; customer: Customer }) => string;
+  render: (data: { appointment: Appointment; customer: Customer; user?: { email: string; name: string | null }; url?: string; token?: string }) => string;
 }
 
 // Email templates registry
@@ -320,6 +323,53 @@ const emailTemplates: Record<string, EmailTemplate> = {
         <p>Best regards,<br>ServiceSync Team</p>
       </div>
     `
+  },
+  passwordReset: {
+    name: 'passwordReset',
+    subject: 'Reset your password - ServiceSync',
+    render: (data: { user?: { email: string; name: string | null }; url?: string; token?: string }) => `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="color: #0d9488; margin: 0;">ServiceSync</h1>
+          <p style="color: #64748b; margin: 5px 0 0 0;">Professional appointment booking platform</p>
+        </div>
+        
+        <h2 style="color: #0d9488;">Reset Your Password</h2>
+        <p>Dear ${data.user?.name || 'Valued Customer'},</p>
+        <p>We received a request to reset your password for your ServiceSync account. If you made this request, click the button below to reset your password:</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${data.url}" 
+             style="background: #0d9488; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold;">
+            Reset Password
+          </a>
+        </div>
+        
+        <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0; color: #64748b; font-size: 14px;">
+            <strong>Important:</strong> This link will expire in 1 hour for security reasons. If you don't reset your password within this time, you'll need to request a new reset link.
+          </p>
+        </div>
+        
+        <p>If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+        <p>For security reasons, never share this link with anyone. ServiceSync will never ask for your password via email.</p>
+        
+        <div style="border-top: 1px solid #e2e8f0; margin: 30px 0; padding-top: 20px;">
+          <p style="color: #64748b; font-size: 14px; margin: 0;">
+            If the button doesn't work, you can copy and paste this link into your browser:<br>
+            <a href="${data.url}" style="color: #0d9488; word-break: break-all;">${data.url}</a>
+          </p>
+        </div>
+        
+        <p>Best regards,<br>ServiceSync Team</p>
+        
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+          <p style="color: #64748b; font-size: 12px; margin: 0;">
+            Need help? Contact us at <a href="mailto:support@emails.ariflab.xyz" style="color: #0d9488;">support@emails.ariflab.xyz</a>
+          </p>
+        </div>
+      </div>
+    `
   }
 };
 
@@ -336,7 +386,7 @@ export async function sendEmail(emailData: EmailData): Promise<boolean> {
       throw new Error(`Email template '${emailData.template}' not found`);
     }
 
-    const html = template.render(emailData.data);
+    const html = template.render(emailData.data as any);
     
     const result = await resend.emails.send({
       from: 'ServiceSync <noreply@emails.ariflab.xyz>', // Use your verified domain
