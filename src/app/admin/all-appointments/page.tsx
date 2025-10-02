@@ -4,10 +4,10 @@ import { getAppointments } from "@/lib/data/admin";
 import { redirect } from "next/navigation";
 
 interface AllAppointmentsPageProps {
-  searchParams: {
+  searchParams: Promise<{
     page?: string;
     limit?: string;
-  };
+  }>;
 }
 
 export default async function AllAppointmentsPage({ searchParams }: AllAppointmentsPageProps) {
@@ -16,8 +16,9 @@ export default async function AllAppointmentsPage({ searchParams }: AllAppointme
     redirect("/sign-in");
   }
 
-  const page = parseInt(searchParams.page || "1", 10);
-  const limit = parseInt(searchParams.limit || "20", 10);
+  const resolvedSearchParams = await searchParams;
+  const page = parseInt(resolvedSearchParams.page || "1", 10);
+  const limit = parseInt(resolvedSearchParams.limit || "20", 10);
   
   const { appointments, total, totalPages } = await getAppointments("", "admin", page, limit);
 
