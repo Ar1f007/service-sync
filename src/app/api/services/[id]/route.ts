@@ -7,6 +7,31 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
+// GET /api/services/[id] - Get a specific service
+export async function GET(request: NextRequest, context: RouteContext) {
+  try {
+    const { id } = await context.params;
+    
+    const service = await prismaInstance.service.findUnique({
+      where: { id },
+      include: {
+        addons: {
+          where: { isActive: true }
+        }
+      }
+    });
+
+    if (!service) {
+      return NextResponse.json({ error: "Service not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(service);
+  } catch (error: any) {
+    console.error("Failed to fetch service:", error);
+    return NextResponse.json({ error: error.message || "Failed to fetch service" }, { status: 500 });
+  }
+}
+
 export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     // Await the params since it's now a Promise

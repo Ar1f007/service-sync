@@ -41,7 +41,8 @@ export default function Navbar() {
 			// Customer sees: Services, Book Appointment, My Appointments, My Calendar
 			return [
 				{ href: "/services", label: "Services", public: true, auth: false, admin: false, employee: false },
-				{ href: "/book", label: "Book Appointment", auth: true, public: false, admin: false, employee: false },
+				// { href: "/services", label: "Services", public: true, auth: false, admin: false, employee: false },
+				{ href: "/book", label: "Book Appointment", auth: true, public: true, admin: false, employee: false },
 				{ href: "/my-appointments", label: "My Appointments", auth: true, public: false, admin: false, employee: false },
 				{ href: "/my-calendar", label: "My Calendar", auth: true, public: false, admin: false, employee: false }
 			];

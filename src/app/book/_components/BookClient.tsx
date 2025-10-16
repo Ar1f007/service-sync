@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
 import { cn, formatPrice } from "@/lib/utils";
+import { VoiceSearchModal } from "@/components/voice/VoiceSearchModal";
 
 interface Service {
 	id: string;
@@ -112,6 +113,7 @@ export default function BookClient({ services }: BookClientProps) {
 		totalDuration: number;
 	} | null>(null);
 	const [isLoadingPricing, setIsLoadingPricing] = useState(false);
+	const [voiceSearchOpen, setVoiceSearchOpen] = useState(false);
 	const timezone =
 		Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London";
 
@@ -273,6 +275,16 @@ export default function BookClient({ services }: BookClientProps) {
 
 	const selectedServiceData = services.find((s) => s.id === serviceId);
 
+	const handleVoiceBooking = (serviceId: string, date: string, time: string) => {
+		console.log('Voice booking data:', { serviceId, date, time });
+		// Pre-fill the booking form with voice search results
+		form.setValue('serviceId', serviceId);
+		form.setValue('date', date);
+		form.setValue('time', time);
+		// Open the booking dialog
+		setIsBookingDialogOpen(true);
+	};
+
 	const onSubmit = async (data: BookingFormData) => {
 		setBookingStatus("loading");
 		form.clearErrors("root");
@@ -405,8 +417,26 @@ export default function BookClient({ services }: BookClientProps) {
 					<h1 className="text-4xl font-bold text-slate-900 mb-4">
 						Book Your Appointment
 					</h1>
-					<p className="text-xl text-slate-600">
+					<p className="text-xl text-slate-600 mb-6">
 						Choose your service and preferred time to get started.
+					</p>
+					
+					{/* Voice Search Button */}
+					<div className="flex justify-center">
+						<Button
+							onClick={() => setVoiceSearchOpen(true)}
+							variant="outline"
+							size="lg"
+							className="gap-2 bg-gradient-to-r from-teal-500 to-blue-500 text-white hover:from-teal-600 hover:to-blue-600 border-0 shadow-lg"
+						>
+							<svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+								<path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+							</svg>
+							Voice Search
+						</Button>
+					</div>
+					<p className="text-sm text-slate-500 mt-2">
+						Try: "Book a haircut for tomorrow" or "Show me massage appointments this weekend"
 					</p>
 				</div>
 
@@ -942,6 +972,13 @@ export default function BookClient({ services }: BookClientProps) {
 						</div>
 					</CardContent>
 				</Card>
+
+				{/* Voice Search Modal */}
+				<VoiceSearchModal
+					open={voiceSearchOpen}
+					onOpenChange={setVoiceSearchOpen}
+					onBookingConfirmed={handleVoiceBooking}
+				/>
 			</div>
 		</div>
 	);
