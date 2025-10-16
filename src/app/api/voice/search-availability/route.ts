@@ -165,7 +165,7 @@ async function findNextAvailableDays(serviceId: string, startDate: Date, count: 
       results.push({
         date: format(currentDate, 'yyyy-MM-dd'),
         dayName: format(currentDate, 'EEEE, MMMM do'),
-        availableSlots: slots.slice(0, 3).map(slot => ({
+        availableSlots: slots.slice(0, 3).map((slot: { time: any; status: any; }) => ({
           time: slot.time,
           date: format(currentDate, 'yyyy-MM-dd'),
           status: slot.status

@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       
       // Feature matching
       if (features && features.length > 0) {
-        const matchingFeatures = features.filter(feature => 
+        const matchingFeatures = features.filter((feature: string) => 
           service.features.some(f => f.toLowerCase().includes(feature.toLowerCase()))
         );
         score += matchingFeatures.length * 10;
