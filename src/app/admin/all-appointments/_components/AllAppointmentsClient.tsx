@@ -5,7 +5,6 @@ import { toZonedTime } from "date-fns-tz";
 import { Briefcase, Calendar, ClockIcon, Eye, UserIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import {
@@ -43,6 +42,7 @@ import {
 } from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { formatPrice } from "@/lib/utils";
+import { toast } from "sonner";
 import AppointmentManagementDialog from "./AppointmentManagementDialog";
 
 interface Appointment {
@@ -92,6 +92,7 @@ export default function AllAppointmentsClient({
 		useState<Appointment | null>(null);
 	const [isManagementDialogOpen, setIsManagementDialogOpen] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
+	const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(null);
 	const timezone =
 		Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London";
 
@@ -147,6 +148,7 @@ export default function AllAppointmentsClient({
 		appointmentId: string,
 		newStatus: string,
 	) => {
+		setUpdatingAppointmentId(appointmentId);
 		try {
 			const response = await fetch(
 				`/api/appointments/${appointmentId}?timezone=${encodeURIComponent(timezone)}`,
@@ -174,15 +176,19 @@ export default function AllAppointmentsClient({
 				),
 			);
 			setError(null);
-			
-			// Refresh the page to update risk assessments
-			window.location.reload();
+			toast.success("Appointment status updated successfully", {
+				description: `Status changed to ${newStatus}`,
+			});
 		} catch (err: unknown) {
-			setError(
-				err instanceof Error
-					? err.message
-					: "Failed to update appointment status",
-			);
+			const errorMessage = err instanceof Error
+				? err.message
+				: "Failed to update appointment status";
+			setError(errorMessage);
+			toast.error("Failed to update appointment status", {
+				description: errorMessage,
+			});
+		} finally {
+			setUpdatingAppointmentId(null);
 		}
 	};
 
@@ -371,21 +377,21 @@ export default function AllAppointmentsClient({
 																	onValueChange={(value) =>
 																		handleStatusChange(appt.id, value)
 																	}
-																	disabled={appt.status === 'cancelled'}
+																	disabled={appt.status === 'cancelled' || updatingAppointmentId === appt.id}
 																>
-																	<SelectTrigger className="w-[120px] uppercase bg-white border-slate-300">
+																	<SelectTrigger 
+																		className={`w-[140px] uppercase font-medium border-2 ${
+																			appt.status === "completed"
+																				? "bg-green-100 text-green-800 border-green-300 hover:bg-green-200"
+																				: appt.status === "confirmed"
+																					? "bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200"
+																					: appt.status === "pending"
+																						? "bg-yellow-100 text-yellow-800 border-yellow-300 hover:bg-yellow-200"
+																						: "bg-red-100 text-red-800 border-red-300 hover:bg-red-200"
+																		}`}
+																	>
 																		<SelectValue>
-																			<Badge
-																				className={
-																					appt.status === "confirmed"
-																						? "bg-green-100 text-green-800"
-																						: appt.status === "pending"
-																							? "bg-yellow-100 text-yellow-800"
-																							: "bg-red-100 text-red-800"
-																				}
-																			>
-																				{appt.status}
-																			</Badge>
+																			{appt.status}
 																		</SelectValue>
 																	</SelectTrigger>
 																	<SelectContent>
@@ -397,6 +403,9 @@ export default function AllAppointmentsClient({
 																		</SelectItem>
 																		<SelectItem value="cancelled">
 																			Cancelled
+																		</SelectItem>
+																		<SelectItem value="completed">
+																			Completed
 																		</SelectItem>
 																	</SelectContent>
 																</Select>

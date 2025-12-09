@@ -197,9 +197,9 @@ export class RiskAssessmentService {
       // Calculate metrics
       const now = new Date();
       const totalBookings = appointments.length;
-      const completedBookings = appointments.filter(apt => apt.status === 'confirmed').length;
+      const completedBookings = appointments.filter(apt => apt.status === 'completed').length;
       // Only count cancellations made by the client (not admin/staff)
-      // Also count cancellations without cancelledByRole (legacy data) as client cancellations
+      // Also count cancellations without cancelledByRole as client cancellations
       const cancelledBookings = appointments.filter(apt => 
         apt.status === 'cancelled' && 
         (apt.cancelledByRole === 'client' || !apt.cancelledByRole)

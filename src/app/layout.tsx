@@ -4,6 +4,7 @@ import "./globals.css";
 import ConditionalNavbar from "@/components/ConditionalNavbar";
 import ConditionalFooter from "@/components/ConditionalFooter";
 import EmailProcessor from "@/components/EmailProcessor";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
         <ConditionalNavbar />
         {children}
         <ConditionalFooter />
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );
